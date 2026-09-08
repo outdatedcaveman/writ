@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { ThreadEntity, Segment } from "../../types/workspace";
 import { GitBranch, AlertTriangle, CheckCircle2, Clock, Plus, Filter, Compass } from "lucide-react";
 

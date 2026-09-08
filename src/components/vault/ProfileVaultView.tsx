@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { VaultSample, StylisticProfile } from "../../types/profileVault";
 import {
   Sparkles,

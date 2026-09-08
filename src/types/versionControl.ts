@@ -1,4 +1,4 @@
-﻿export type AuthorType = "human" | "ai_daemon" | "ai_copilot";
+export type AuthorType = "human" | "ai_daemon" | "ai_copilot";
 
 export interface AuthorIdentity {
   type: AuthorType;

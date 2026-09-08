@@ -1,4 +1,4 @@
-﻿export interface ThemeCollection {
+export interface ThemeCollection {
   id: string;
   name: string;
   slug: string;
@@ -121,9 +121,36 @@ export interface Project {
   isArchived?: boolean;
 }
 
+export type VaultItemType = "text" | "image" | "video" | "link";
+
+export interface VaultPlacementSuggestion {
+  targetType: "segment" | "wiki_character" | "wiki_argument" | "wiki_plot_point" | "new_thread" | "new_segment";
+  targetId?: string;
+  targetTitle: string;
+  rationale: string;
+  suggestedTextToIntegrate: string;
+  confidenceScore: number; // 0 to 100
+}
+
+export interface ProjectVaultItem {
+  id: string;
+  projectId: string;
+  type: VaultItemType;
+  title: string;
+  content: string; // text or media URL/data
+  mediaUrl?: string;
+  timestamp: number;
+  extractedInsights: string[];
+  placementSuggestion?: VaultPlacementSuggestion;
+  status: "inbox" | "placed" | "archived";
+  placedAt?: number;
+  placedLocation?: string;
+  isArchived?: boolean;
+}
+
 export interface TrashItem {
   id: string;
-  entityType: "theme" | "project" | "draft" | "segment" | "character" | "argument" | "plotPoint" | "thread";
+  entityType: "theme" | "project" | "draft" | "segment" | "character" | "argument" | "plotPoint" | "thread" | "projectVaultItem";
   entityName: string;
   deletedAt: number;
   projectId?: string;

@@ -1,4 +1,4 @@
-﻿export interface CitationItem {
+export interface CitationItem {
   id: string;
   sourceTitle: string;
   authorOrOrg: string;

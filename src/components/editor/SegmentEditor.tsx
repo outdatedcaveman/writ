@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Segment, ThreadEntity, ProjectWiki } from "../../types/workspace";
 import { VersionDAG, AuthorIdentity } from "../../types/versionControl";
 import { computeTextDiff } from "../../engine/vcs/versionTree";

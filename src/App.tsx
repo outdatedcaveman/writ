@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { WorkspaceStore, WorkspaceState } from "./engine/storage/fileManager";
 import { ThemeProjectNav } from "./components/sidebar/ThemeProjectNav";
 import { TrashDrawer } from "./components/sidebar/TrashDrawer";
@@ -7,14 +7,16 @@ import { ProjectWikiView } from "./components/wiki/ProjectWikiView";
 import { RelationshipGraph } from "./components/visualizers/RelationshipGraph";
 import { TimelineMatrix } from "./components/visualizers/TimelineMatrix";
 import { ThreadVisualizer } from "./components/visualizers/ThreadVisualizer";
+import { ProjectVaultView } from "./components/vault/ProjectVaultView";
 import { ProfileVaultView } from "./components/vault/ProfileVaultView";
 import { VersionTreeModal } from "./components/vcs/VersionTreeModal";
 import { AICopilotSidebar } from "./components/copilot/AICopilotSidebar";
 import { createCommitNode, createNewBranch } from "./engine/vcs/versionTree";
 import { deconstructManuscript } from "./engine/analysis/deconstructor";
+import { analyzeAndSuggestPlacement, extractInsightsFromDrop } from "./engine/analysis/vaultSynthesizer";
 import { egonService } from "./services/egonIntegration";
 import { AuthorIdentity } from "./types/versionControl";
-import { ThreadEntity, Segment, Project } from "./types/workspace";
+import { ThreadEntity, Segment, Project, ProjectVaultItem, VaultItemType } from "./types/workspace";
 import {
   Sparkles,
   Wifi,
@@ -29,18 +31,16 @@ const store = new WorkspaceStore();
 
 export default function App() {
   const [workspace, setWorkspace] = useState<WorkspaceState>(() => store.getState());
-  const [activeView, setActiveView] = useState<"editor" | "wiki" | "diagrams" | "timeline" | "threads" | "vault">("editor");
+  const [activeView, setActiveView] = useState<"editor" | "wiki" | "diagrams" | "timeline" | "threads" | "projectVault" | "vault">("editor");
   const [isCopilotOpen, setIsCopilotOpen] = useState(true);
   const [isVcsModalOpen, setIsVcsModalOpen] = useState(false);
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
   const [isEgonOnline, setIsEgonOnline] = useState<boolean | null>(null);
 
-  // Check Egon Mind status
   useEffect(() => {
     egonService.checkHealth().then(online => setIsEgonOnline(online));
   }, []);
 
-  // Save workspace state updates
   const updateState = (updater: (prev: WorkspaceState) => WorkspaceState) => {
     setWorkspace(prev => {
       const next = updater(prev);
@@ -49,7 +49,6 @@ export default function App() {
     });
   };
 
-  // Active Project & Active Segment
   const activeProject = useMemo(() => {
     return workspace.projects.find(p => p.id === workspace.activeProjectId) || workspace.projects[0];
   }, [workspace.projects, workspace.activeProjectId]);
@@ -78,7 +77,10 @@ export default function App() {
     };
   }, [workspace.versionDAGs, activeProject?.id]);
 
-  // Handlers
+  const currentProjectVaultItems = useMemo(() => {
+    return workspace.projectVaultItems[activeProject?.id] || [];
+  }, [workspace.projectVaultItems, activeProject?.id]);
+
   const handleSelectProject = (projectId: string) => {
     updateState(prev => ({
       ...prev,
@@ -108,7 +110,6 @@ export default function App() {
     });
   };
 
-  // Commit changes to Version Control Tree (DAG)
   const handleCommit = (params: {
     segmentId: string;
     text: string;
@@ -127,7 +128,6 @@ export default function App() {
         }
       });
 
-      // Also log activity to Egon Mind if online
       egonService.appendActivity(
         "writ",
         `[VCS] ${params.author.name} committed to ${activeProject.title}: "${params.message}"`,
@@ -144,7 +144,6 @@ export default function App() {
     });
   };
 
-  // Checkout commit from VCS
   const handleCheckoutCommit = (commitId: string) => {
     const commit = activeVersionDag.commits[commitId];
     if (!commit) return;
@@ -189,7 +188,6 @@ export default function App() {
     });
   };
 
-  // Rule 1 Compliant Soft Deletion
   const handleSoftDelete = (id: string, entityType: any, name: string) => {
     updateState(prev => {
       return store.softDelete(
@@ -210,7 +208,142 @@ export default function App() {
     updateState(prev => store.restoreFromTrash(trashId, prev));
   };
 
-  // Deconstruct new raw draft
+  // Add Item to Project Vault
+  const handleAddProjectVaultItem = (item: {
+    type: VaultItemType;
+    title: string;
+    content: string;
+    mediaUrl?: string;
+  }) => {
+    const itemId = `pv-${Date.now().toString(36)}`;
+    const extractedInsights = extractInsightsFromDrop(item.content, item.type);
+
+    const projectSegments = Object.values(workspace.segments).filter(
+      s => s.draftId === activeProject.activeDraftId
+    );
+
+    const suggestion = analyzeAndSuggestPlacement(
+      {
+        id: itemId,
+        projectId: activeProject.id,
+        type: item.type,
+        title: item.title,
+        content: item.content,
+        mediaUrl: item.mediaUrl,
+        timestamp: Date.now(),
+        extractedInsights
+      },
+      activeProject,
+      projectSegments,
+      activeWiki,
+      workspace.threads
+    );
+
+    const newItem: ProjectVaultItem = {
+      id: itemId,
+      projectId: activeProject.id,
+      type: item.type,
+      title: item.title,
+      content: item.content,
+      mediaUrl: item.mediaUrl,
+      timestamp: Date.now(),
+      extractedInsights,
+      placementSuggestion: suggestion,
+      status: "inbox"
+    };
+
+    updateState(prev => {
+      const items = prev.projectVaultItems[activeProject.id] || [];
+      return {
+        ...prev,
+        projectVaultItems: {
+          ...prev.projectVaultItems,
+          [activeProject.id]: [newItem, ...items]
+        }
+      };
+    });
+  };
+
+  // Incorporate Vault Item into Project structure
+  const handleIncorporateVaultItem = (
+    itemId: string,
+    targetType: string,
+    targetId?: string,
+    textToIntegrate?: string
+  ) => {
+    updateState(prev => {
+      const items = prev.projectVaultItems[activeProject.id] || [];
+      const targetItem = items.find(i => i.id === itemId);
+      if (!targetItem) return prev;
+
+      let nextSegments = { ...prev.segments };
+      let nextWiki = { ...prev.wikis[activeProject.id] };
+      let affectedSegmentId = targetId || "";
+
+      if (targetType === "segment" && targetId && nextSegments[targetId]) {
+        const seg = nextSegments[targetId];
+        const updatedContent = `${seg.textContent}\n\n${textToIntegrate || targetItem.content}`;
+        nextSegments[targetId] = {
+          ...seg,
+          textContent: updatedContent
+        };
+        affectedSegmentId = targetId;
+      } else if (targetType === "wiki_character" && targetId) {
+        nextWiki.characters = nextWiki.characters.map(c => {
+          if (c.id === targetId) {
+            return {
+              ...c,
+              motivation: `${c.motivation} (Note: ${targetItem.content})`
+            };
+          }
+          return c;
+        });
+      }
+
+      // Mark item as placed
+      const nextItems = items.map(it => {
+        if (it.id === itemId) {
+          return {
+            ...it,
+            status: "placed" as const,
+            placedAt: Date.now(),
+            placedLocation: targetItem.placementSuggestion?.targetTitle || "Project Manuscript"
+          };
+        }
+        return it;
+      });
+
+      // Automatically record a Version Control Commit for the incorporated thought
+      const currentDag = prev.versionDAGs[activeProject.id];
+      const { nextDag } = createCommitNode({
+        dag: currentDag,
+        author: { type: "ai_copilot", name: "Writ Auto-Arranger" },
+        message: `Incorporated vault item "${targetItem.title}" into ${targetItem.placementSuggestion?.targetTitle || "Project"}`,
+        affectedSegmentIds: affectedSegmentId ? [affectedSegmentId] : [],
+        segmentSnapshots: affectedSegmentId && nextSegments[affectedSegmentId]
+          ? { [affectedSegmentId]: nextSegments[affectedSegmentId].textContent }
+          : {}
+      });
+
+      return {
+        ...prev,
+        segments: nextSegments,
+        wikis: {
+          ...prev.wikis,
+          [activeProject.id]: nextWiki
+        },
+        projectVaultItems: {
+          ...prev.projectVaultItems,
+          [activeProject.id]: nextItems
+        },
+        versionDAGs: {
+          ...prev.versionDAGs,
+          [activeProject.id]: nextDag
+        }
+      };
+    });
+  };
+
   const handleDeconstructAndApply = (rawText: string) => {
     const draftId = activeProject.activeDraftId;
     const result = deconstructManuscript(rawText, draftId, activeProject.id);
@@ -247,7 +380,6 @@ export default function App() {
         plotPoints: [...activeWiki.plotPoints, ...result.plotPoints]
       };
 
-      // Record Root Ingestion Commit
       const { nextDag } = createCommitNode({
         dag: activeVersionDag,
         author: { type: "ai_daemon", name: "Writ Ingestion Engine" },
@@ -328,6 +460,10 @@ export default function App() {
       segments: {
         ...prev.segments,
         [segId]: newSegment
+      },
+      projectVaultItems: {
+        ...prev.projectVaultItems,
+        [projId]: []
       },
       wikis: {
         ...prev.wikis,
@@ -418,6 +554,7 @@ export default function App() {
         segments={Object.values(workspace.segments).filter(s => s.draftId === activeProject.activeDraftId)}
         versionDag={activeVersionDag}
         trashCount={workspace.trash.length}
+        vaultItemCount={currentProjectVaultItems.length}
         activeView={activeView}
         onSelectProject={handleSelectProject}
         onSelectSegment={handleSelectSegment}
@@ -438,12 +575,15 @@ export default function App() {
             </h1>
             <span className="text-xs text-[#444]">/</span>
             <span className="text-xs text-[#A09A8F] capitalize">
-              {activeView === "editor" && activeSegment ? `Section ${activeSegment.romanNumeral} · ${activeSegment.title}` : activeView}
+              {activeView === "editor" && activeSegment
+                ? `Section ${activeSegment.romanNumeral} · ${activeSegment.title}`
+                : activeView === "projectVault"
+                ? "Project Drop Vault & Auto-Arranger"
+                : activeView}
             </span>
           </div>
 
           <div className="flex items-center gap-4 text-xs">
-            {/* Egon Mind Connection Status */}
             <div className="flex items-center gap-1.5 text-[#66625B]">
               {isEgonOnline ? (
                 <>
@@ -458,7 +598,6 @@ export default function App() {
               )}
             </div>
 
-            {/* Toggle AI Copilot */}
             <button
               onClick={() => setIsCopilotOpen(!isCopilotOpen)}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
@@ -484,6 +623,17 @@ export default function App() {
               onUpdateText={handleUpdateText}
               onCommit={handleCommit}
               onOpenVcsModal={() => setIsVcsModalOpen(true)}
+            />
+          ) : activeView === "projectVault" ? (
+            <ProjectVaultView
+              project={activeProject}
+              vaultItems={currentProjectVaultItems}
+              segments={Object.values(workspace.segments).filter(s => s.draftId === activeProject.activeDraftId)}
+              wiki={activeWiki}
+              threads={workspace.threads}
+              onAddItem={handleAddProjectVaultItem}
+              onIncorporateItem={handleIncorporateVaultItem}
+              onSoftDeleteItem={(id, title) => handleSoftDelete(id, "projectVaultItem", title)}
             />
           ) : activeView === "wiki" && activeWiki ? (
             <ProjectWikiView

@@ -1,4 +1,4 @@
-﻿import {
+import {
   ThemeCollection,
   Project,
   ProjectWiki,
@@ -6,6 +6,7 @@
   Segment,
   ThreadEntity,
   TrashItem,
+  ProjectVaultItem
 } from "../../types/workspace";
 import { VersionDAG } from "../../types/versionControl";
 import { VaultSample, StylisticProfile } from "../../types/profileVault";
@@ -19,6 +20,7 @@ export interface WorkspaceState {
   drafts: Record<string, Draft>; // draftId -> Draft
   segments: Record<string, Segment>; // segmentId -> Segment
   threads: Record<string, ThreadEntity>; // threadId -> Thread
+  projectVaultItems: Record<string, ProjectVaultItem[]>; // projectId -> ProjectVaultItem[]
   versionDAGs: Record<string, VersionDAG>; // projectId -> VersionDAG
   vaultSamples: VaultSample[];
   stylisticProfile: StylisticProfile;
@@ -314,6 +316,45 @@ export function getInitialWorkspace(): WorkspaceState {
     updatedAt: Date.now()
   };
 
+  const initialProjectVaultItems: ProjectVaultItem[] = [
+    {
+      id: "pv-item-1",
+      projectId: "proj-uncertainty",
+      type: "text",
+      title: "Bus-Stop Weather Forecast Observation",
+      content: "The bus-stop conversation about weather forecasts: people get visibly irritated when an app reports a 40% chance of rain. They prefer an outright false 'Sunny' over an honest probability, because ambiguity requires carrying an umbrella.",
+      timestamp: Date.now() - 86400000 * 3,
+      extractedInsights: ["Psychological Dimension", "Concrete Grounded Example", "Discomfort with Ambiguity"],
+      placementSuggestion: {
+        targetType: "segment",
+        targetId: "seg-3",
+        targetTitle: "Section III: Certainty as a social demand",
+        rationale: "Provides a visceral, relatable everyday anchor illustrating why human psychology flees discomfort into false certainty.",
+        suggestedTextToIntegrate: "We see this even in ordinary life: a weather forecast with a 40 percent probability of rain provokes more agitation than a false promise of sunshine, because ambiguity demands that we carry an umbrella.",
+        confidenceScore: 94
+      },
+      status: "inbox"
+    },
+    {
+      id: "pv-item-2",
+      projectId: "proj-uncertainty",
+      type: "text",
+      title: "Executive Memo Risk Directive",
+      content: "An executive risk committee memo instructing analysts: 'Remove open-ended questions from slide decks; present findings as settled assessments to preserve investor confidence.'",
+      timestamp: Date.now() - 86400000 * 2,
+      extractedInsights: ["Institutional Friction", "Performative Confidence", "Corporate Incentive Debt"],
+      placementSuggestion: {
+        targetType: "segment",
+        targetId: "seg-2",
+        targetTitle: "Section II: Where certainty comes from",
+        rationale: "Direct empirical evidence showing how corporate hierarchies actively mandate the suppression of nuance.",
+        suggestedTextToIntegrate: "In corporate boardrooms, risk analysts are routinely instructed to scrub open questions from slide decks, converting honest ignorance into settled forecasts to placate investor anxiety.",
+        confidenceScore: 96
+      },
+      status: "inbox"
+    }
+  ];
+
   const rootCommit = {
     id: "c-root-001",
     parentId: null,
@@ -375,6 +416,9 @@ export function getInitialWorkspace(): WorkspaceState {
       [thread2.id]: thread2,
       [thread3.id]: thread3
     },
+    projectVaultItems: {
+      [proj1.id]: initialProjectVaultItems
+    },
     versionDAGs: { [proj1.id]: vcs1 },
     vaultSamples: initialVaultSamples,
     stylisticProfile: initialStylisticProfile,
@@ -411,7 +455,11 @@ export class WorkspaceStore {
       if (typeof window !== "undefined" && window.localStorage) {
         const raw = window.localStorage.getItem(STORAGE_KEY);
         if (raw) {
-          return JSON.parse(raw);
+          const parsed = JSON.parse(raw);
+          if (!parsed.projectVaultItems) {
+            parsed.projectVaultItems = {};
+          }
+          return parsed;
         }
       }
     } catch (e) {
@@ -425,7 +473,6 @@ export class WorkspaceStore {
     const nextTrash = [item, ...currentState.trash];
     const nextState = { ...currentState, trash: nextTrash };
 
-    // Apply soft-deletion flag according to entity type
     if (item.entityType === "segment") {
       const seg = nextState.segments[item.id];
       if (seg) {
@@ -470,6 +517,13 @@ export class WorkspaceStore {
           plotPoints: wiki.plotPoints.map(p => p.id === item.id ? { ...p, isArchived: true } : p)
         };
       }
+    } else if (item.entityType === "projectVaultItem") {
+      const projId = item.projectId || nextState.activeProjectId;
+      const items = nextState.projectVaultItems[projId] || [];
+      nextState.projectVaultItems = {
+        ...nextState.projectVaultItems,
+        [projId]: items.map(it => it.id === item.id ? { ...it, isArchived: true } : it)
+      };
     }
 
     this.save(nextState);
@@ -528,6 +582,13 @@ export class WorkspaceStore {
           plotPoints: wiki.plotPoints.map(p => p.id === target.id ? { ...p, isArchived: false } : p)
         };
       }
+    } else if (target.entityType === "projectVaultItem") {
+      const projId = target.projectId || nextState.activeProjectId;
+      const items = nextState.projectVaultItems[projId] || [];
+      nextState.projectVaultItems = {
+        ...nextState.projectVaultItems,
+        [projId]: items.map(it => it.id === target.id ? { ...it, isArchived: false } : it)
+      };
     }
 
     this.save(nextState);

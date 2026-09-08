@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { Segment, CharacterEntity, ThreadEntity, PlotPointEntity } from "../../types/workspace";
 import { Calendar, Activity, CheckCircle2, Circle, Clock, ArrowRight } from "lucide-react";
 

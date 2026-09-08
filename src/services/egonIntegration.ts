@@ -1,4 +1,4 @@
-﻿// Integration service with Bruno\x27s central Egon Mind hub
+// Integration service with Bruno\x27s central Egon Mind hub
 
 export interface EgonMemoryUpsertParams {
   kind: "fact" | "decision" | "preference" | "skill" | "pattern";

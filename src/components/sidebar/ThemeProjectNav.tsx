@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import {
   ThemeCollection,
   Project,
@@ -18,7 +18,8 @@ import {
   FileText,
   Layers,
   Archive,
-  Compass
+  Compass,
+  Inbox
 } from "lucide-react";
 
 interface ThemeProjectNavProps {
@@ -29,10 +30,11 @@ interface ThemeProjectNavProps {
   segments: Segment[];
   versionDag: VersionDAG;
   trashCount: number;
-  activeView: "editor" | "wiki" | "diagrams" | "timeline" | "threads" | "vault";
+  vaultItemCount: number;
+  activeView: "editor" | "wiki" | "diagrams" | "timeline" | "threads" | "projectVault" | "vault";
   onSelectProject: (projectId: string) => void;
   onSelectSegment: (segmentId: string) => void;
-  onSelectView: (view: "editor" | "wiki" | "diagrams" | "timeline" | "threads" | "vault") => void;
+  onSelectView: (view: "editor" | "wiki" | "diagrams" | "timeline" | "threads" | "projectVault" | "vault") => void;
   onOpenVcsModal: () => void;
   onOpenTrashModal: () => void;
   onNewProject: () => void;
@@ -47,6 +49,7 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
   segments,
   versionDag,
   trashCount,
+  vaultItemCount,
   activeView,
   onSelectProject,
   onSelectSegment,
@@ -56,10 +59,8 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
   onNewProject,
   onNewSegment
 }) => {
-  const [themesOpen, setThemesOpen] = useState(true);
   const currentProject = projects.find(p => p.id === activeProjectId) || projects[0];
   const activeSegments = segments.filter(s => !s.isArchived).sort((a, b) => a.order - b.order);
-
   const commitCount = Object.keys(versionDag?.commits || {}).length;
 
   return (
@@ -116,6 +117,23 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
           >
             <FileText className="w-3.5 h-3.5 text-[#7E9F86]" />
             <span>Manuscript Editor</span>
+          </button>
+
+          <button
+            onClick={() => onSelectView("projectVault")}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+              activeView === "projectVault"
+                ? "bg-[#1c1c1c] text-[#ECE7DE]"
+                : "text-[#A09A8F] hover:bg-[#121212] hover:text-[#ECE7DE]"
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <Inbox className="w-3.5 h-3.5 text-[#C8A051]" />
+              <span>Project Drop Vault</span>
+            </div>
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#161616] text-[#A09A8F]">
+              {vaultItemCount}
+            </span>
           </button>
 
           <button

@@ -1,4 +1,4 @@
-﻿export interface VaultSample {
+export interface VaultSample {
   id: string;
   title: string;
   author: "self" | "admired_model";

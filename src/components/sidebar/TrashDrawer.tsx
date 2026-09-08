@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { TrashItem } from "../../types/workspace";
 import { Trash2, RotateCcw, X, AlertCircle } from "lucide-react";
 

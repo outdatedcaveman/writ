@@ -1,4 +1,4 @@
-﻿import { CommitNode, VersionDAG, AuthorIdentity, DiffChange } from "../../types/versionControl";
+import { CommitNode, VersionDAG, AuthorIdentity, DiffChange } from "../../types/versionControl";
 import { diffLines, diffWords } from "diff";
 
 export function generateCommitHash(): string {

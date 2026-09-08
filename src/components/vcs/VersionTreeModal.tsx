@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { VersionDAG, CommitNode, Branch } from "../../types/versionControl";
 import { getCommitHistoryList } from "../../engine/vcs/versionTree";
 import {

@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { CharacterEntity, ArgumentEntity } from "../../types/workspace";
 import { Users, Sparkles, ChevronRight, ShieldAlert } from "lucide-react";
 

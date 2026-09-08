@@ -1,4 +1,4 @@
-﻿import { Segment, ThreadEntity, ProjectWiki } from "../../types/workspace";
+import { Segment, ThreadEntity, ProjectWiki } from "../../types/workspace";
 
 export interface QualitativeBullet {
   category: "Thematic Coherence" | "Pacing & Cadence" | "Voice & Style" | "Thread Resolution" | "Actionable Polish";

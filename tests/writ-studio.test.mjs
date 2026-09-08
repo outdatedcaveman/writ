@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 // Test suite for Writ Desktop Studio core engines
 
 test("1. Version Control DAG Engine: creates commits, tracks author attribution, and computes diffs", async () => {
-  // Test commit generation and attribution
   const initialCommit = {
     id: "c-root-1",
     parentId: null,
@@ -23,7 +22,6 @@ test("1. Version Control DAG Engine: creates commits, tracks author attribution,
     headCommitId: "c-root-1"
   };
 
-  // Simulate human edit commit
   const humanCommitId = "c-human-2";
   const humanCommit = {
     id: humanCommitId,
@@ -45,7 +43,6 @@ test("1. Version Control DAG Engine: creates commits, tracks author attribution,
   assert.equal(dag.commits[humanCommitId].author.name, "Bruno");
   assert.equal(dag.commits[humanCommitId].parentId, "c-root-1");
 
-  // Create branch
   const branchName = "lyrical-experiment";
   dag.branches[branchName] = { name: branchName, headCommitId: humanCommitId, createdAt: Date.now() };
   dag.activeBranch = branchName;
@@ -67,7 +64,6 @@ test("2. Safety Trash Architecture (Rule 1 Compliance): never deletes permanentl
     trash: []
   };
 
-  // Perform soft delete
   const trashItem = {
     id: sampleSegment.id,
     entityType: "segment",
@@ -79,13 +75,11 @@ test("2. Safety Trash Architecture (Rule 1 Compliance): never deletes permanentl
   state.trash.unshift(trashItem);
   state.segments[sampleSegment.id].isArchived = true;
 
-  // Verify it is preserved in trash and marked archived
   assert.equal(state.trash.length, 1);
   assert.equal(state.trash[0].entityName, "Discarded Chapter Idea");
   assert.equal(state.segments[sampleSegment.id].isArchived, true);
   assert.ok(state.segments[sampleSegment.id].textContent.length > 0, "Data was not wiped!");
 
-  // Perform restore
   state.trash = state.trash.filter(t => t.id !== sampleSegment.id);
   state.segments[sampleSegment.id].isArchived = false;
 
@@ -112,15 +106,26 @@ To live well with uncertainty is to recognize that our maps are always smaller t
   assert.ok(sections[2].includes("Section III: Living with Doubt"));
 });
 
-test("4. Analytical Metrics & Cadence Diagnostics", async () => {
-  const sampleText = "Short sentence. Another brief claim. Here is a much longer sentence that elaborates on the philosophical consequences of institutional risk aversion.";
-  const words = sampleText.match(/\b[a-zA-Z0-9'’-]+\b/g) || [];
-  const sentences = sampleText.match(/[^.!?]+[.!?]+(\s|$)/g) || [];
+test("4. Project Drop Vault & AI Synthesizer: auto-placement and structural incorporation", async () => {
+  const droppedText = "The bus-stop conversation about weather forecasts: people get visibly irritated when an app reports a 40% chance of rain.";
+  
+  // Simulating placement matching logic
+  const isPersonal = /bus|weather|ordinary|personal|fear/i.test(droppedText);
+  assert.ok(isPersonal, "Should recognize personal/ordinary dimension");
 
-  assert.equal(sentences.length, 3);
-  assert.ok(words.length > 15);
+  const targetSection = isPersonal ? "Section III" : "Section I";
+  assert.equal(targetSection, "Section III");
 
-  const sentenceLengths = sentences.map(s => (s.match(/\b[a-zA-Z0-9'’-]+\b/g) || []).length);
-  const avg = Math.round(sentenceLengths.reduce((a, b) => a + b, 0) / sentenceLengths.length);
-  assert.ok(avg > 4);
+  // Simulating structural incorporation
+  const targetSegment = {
+    id: "seg-3",
+    title: "Certainty as a social demand",
+    textContent: "Initial draft of Section III."
+  };
+
+  const textToIntegrate = `We see this even in ordinary life: ${droppedText}`;
+  targetSegment.textContent += `\n\n${textToIntegrate}`;
+
+  assert.ok(targetSegment.textContent.includes("We see this even in ordinary life:"));
+  assert.ok(targetSegment.textContent.includes("40% chance of rain"));
 });

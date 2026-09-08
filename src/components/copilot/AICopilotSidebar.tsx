@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { Project, Segment, ProjectWiki, ThreadEntity } from "../../types/workspace";
 import { StylisticProfile } from "../../types/profileVault";
 import { researchService, FactCheckReport } from "../../services/researchService";
