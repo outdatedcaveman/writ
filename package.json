@@ -45,12 +45,15 @@
     "directories": {
       "output": "release"
     },
+    "icon": "assets/icon.ico",
     "files": [
       "dist/**/*",
       "electron/**/*",
+      "assets/**/*",
       "package.json"
     ],
     "win": {
+      "icon": "assets/icon.ico",
       "target": ["portable"]
     },
     "portable": {
