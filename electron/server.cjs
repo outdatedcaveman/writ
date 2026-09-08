@@ -4,17 +4,40 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 
-// Determine data directory (default: c:\Users\bruno\Documents\Writ\data or relative ./data)
-const BASE_DIR = path.resolve(__dirname, '..');
-const DATA_DIR = process.env.WRIT_DATA_DIR || path.join(BASE_DIR, 'data');
+function resolveDataDirectory() {
+  if (process.env.WRIT_DATA_DIR) {
+    return path.resolve(process.env.WRIT_DATA_DIR);
+  }
+
+  // If running unpackaged from source during dev:
+  if (!__dirname.includes('app.asar')) {
+    return path.resolve(__dirname, '..', 'data');
+  }
+
+  // When packaged in Electron app.asar:
+  // NEVER write to app.asar! Check user's Documents/Writ
+  const userDocsWrit = path.join(os.homedir(), 'Documents', 'Writ');
+  if (fs.existsSync(userDocsWrit)) {
+    return path.join(userDocsWrit, 'data');
+  }
+
+  // Fallback to Documents/Writ/data
+  return path.join(os.homedir(), 'Documents', 'Writ', 'data');
+}
+
+const DATA_DIR = resolveDataDirectory();
 const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
 const TRASH_DIR = path.join(DATA_DIR, 'trash');
-const DIST_DIR = path.join(BASE_DIR, 'dist');
+const DIST_DIR = path.join(__dirname, '..', 'dist');
 
-// Ensure storage directories exist
+// Ensure physical disk storage directories exist
 [DATA_DIR, PROJECTS_DIR, TRASH_DIR].forEach(dir => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch (err) {
+    console.error(`Warning: Could not create directory ${dir}:`, err.message);
   }
 });
 
