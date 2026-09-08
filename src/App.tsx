@@ -16,8 +16,14 @@ import { createCommitNode, createNewBranch } from "./engine/vcs/versionTree";
 import { deconstructManuscript } from "./engine/analysis/deconstructor";
 import { analyzeAndSuggestPlacement, extractInsightsFromDrop } from "./engine/analysis/vaultSynthesizer";
 import { egonService } from "./services/egonIntegration";
+import { DesktopBridge } from "./engine/storage/desktopBridge";
 import { AuthorIdentity } from "./types/versionControl";
-import { ThreadEntity, Segment, Project, ProjectVaultItem, VaultItemType } from "./types/workspace";
+import { ThreadEntity, Segment, Project, ProjectWiki, ProjectVaultItem, VaultItemType } from "./types/workspace";
+import { VisualSettings, defaultVisualSettings } from "./types/visualSettings";
+import { VisualSettingsModal } from "./components/settings/VisualSettingsModal";
+import { ProjectSettingsModal } from "./components/modals/ProjectSettingsModal";
+import { SegmentMetadataModal } from "./components/modals/SegmentMetadataModal";
+import { ThemeManagerModal } from "./components/modals/ThemeManagerModal";
 import {
   Sparkles,
   Wifi,
@@ -26,7 +32,15 @@ import {
   FileText,
   Sliders,
   CheckCircle2,
-  Share2
+  Share2,
+  Maximize2,
+  Minimize2,
+  Settings,
+  Layers,
+  BookOpen,
+  FolderTree,
+  Compass,
+  Inbox
 } from "lucide-react";
 
 const store = new WorkspaceStore();
@@ -38,6 +52,35 @@ export default function App() {
   const [isVcsModalOpen, setIsVcsModalOpen] = useState(false);
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
   const [isEgonOnline, setIsEgonOnline] = useState<boolean | null>(null);
+
+  // Visual Customization & Control Center State
+  const [visualSettings, setVisualSettings] = useState<VisualSettings>(() => {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        const saved = window.localStorage.getItem("writ:visual:settings:v1");
+        if (saved) return JSON.parse(saved);
+      }
+    } catch {}
+    return defaultVisualSettings;
+  });
+
+  const [isVisualSettingsOpen, setIsVisualSettingsOpen] = useState(false);
+  const [isProjectSettingsOpen, setIsProjectSettingsOpen] = useState(false);
+  const [isSegmentSettingsOpen, setIsSegmentSettingsOpen] = useState(false);
+  const [isThemeManagerOpen, setIsThemeManagerOpen] = useState(false);
+  const [isZenMode, setIsZenMode] = useState(false);
+
+  const handleUpdateVisualSettings = (updater: (prev: VisualSettings) => VisualSettings) => {
+    setVisualSettings(prev => {
+      const next = updater(prev);
+      try {
+        if (typeof window !== "undefined" && window.localStorage) {
+          window.localStorage.setItem("writ:visual:settings:v1", JSON.stringify(next));
+        }
+      } catch {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     egonService.checkHealth().then(online => setIsEgonOnline(online));
@@ -541,27 +584,124 @@ export default function App() {
     setActiveView("editor");
   };
 
+  const handleSaveProjectSettings = (updatedProject: Partial<Project>, updatedWiki?: Partial<ProjectWiki>) => {
+    updateState(prev => ({
+      ...prev,
+      projects: prev.projects.map(p => p.id === activeProject.id ? { ...p, ...updatedProject } : p),
+      wikis: updatedWiki && prev.wikis[activeProject.id]
+        ? {
+            ...prev.wikis,
+            [activeProject.id]: {
+              ...prev.wikis[activeProject.id],
+              ...updatedWiki
+            }
+          }
+        : prev.wikis
+    }));
+  };
+
+  const handleSaveSegmentSettings = (updatedSegment: Partial<Segment>) => {
+    if (!activeSegment) return;
+    updateState(prev => ({
+      ...prev,
+      segments: {
+        ...prev.segments,
+        [activeSegment.id]: {
+          ...prev.segments[activeSegment.id],
+          ...updatedSegment
+        }
+      }
+    }));
+  };
+
+  const handleAddTheme = (title: string, description: string, color: string) => {
+    const newTheme = {
+      id: `theme-${Date.now().toString(36)}`,
+      name: title,
+      slug: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+      description,
+      colorBadge: color,
+      createdAt: Date.now()
+    };
+    updateState(prev => ({
+      ...prev,
+      themes: [...prev.themes, newTheme]
+    }));
+  };
+
+  const handleSoftDeleteTheme = (id: string, name: string) => {
+    handleSoftDelete(id, "theme" as any, name);
+    updateState(prev => ({
+      ...prev,
+      themes: prev.themes.filter(t => t.id !== id)
+    }));
+  };
+
+  const handleExportManuscript = () => {
+    const draft = workspace.drafts[activeProject.activeDraftId];
+    if (!draft) return;
+    const segs = draft.segmentIds
+      .map(id => workspace.segments[id])
+      .filter(s => s && !s.isArchived)
+      .sort((a, b) => a.order - b.order);
+
+    let md = `# ${activeProject.title}\n\n`;
+    if (activeWiki?.themeAndPremise.readerPromise) {
+      md += `*${activeWiki.themeAndPremise.readerPromise}*\n\n---\n\n`;
+    }
+    segs.forEach(s => {
+      md += `## Section ${s.romanNumeral}: ${s.title}\n\n${s.textContent}\n\n---\n\n`;
+    });
+
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${activeProject.title.replace(/[^a-z0-9]/gi, "_")}_Manuscript.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportBackupJson = () => {
+    const blob = new Blob([JSON.stringify(workspace, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Writ_Workspace_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleTriggerBackupSnapshot = () => {
+    DesktopBridge.getInstance().saveProject(activeProject);
+  };
+
   return (
     <div className="flex h-screen w-screen bg-[#080808] text-[#ECE7DE] overflow-hidden">
-      {/* LEFT NAVIGATION COLUMN */}
-      <ThemeProjectNav
-        themes={workspace.themes}
-        projects={workspace.projects}
-        activeProjectId={activeProject.id}
-        activeSegmentId={activeSegment?.id || null}
-        segments={Object.values(workspace.segments).filter(s => s.draftId === activeProject.activeDraftId)}
-        versionDag={activeVersionDag}
-        trashCount={workspace.trash.length}
-        vaultItemCount={currentProjectVaultItems.length}
-        activeView={activeView}
-        onSelectProject={handleSelectProject}
-        onSelectSegment={handleSelectSegment}
-        onSelectView={setActiveView}
-        onOpenVcsModal={() => setIsVcsModalOpen(true)}
-        onOpenTrashModal={() => setIsTrashModalOpen(true)}
-        onNewProject={handleNewProject}
-        onNewSegment={handleNewSegment}
-      />
+      {/* LEFT NAVIGATION COLUMN (Hidden in Zen Mode) */}
+      {!isZenMode && (
+        <ThemeProjectNav
+          themes={workspace.themes}
+          projects={workspace.projects}
+          activeProjectId={activeProject.id}
+          activeSegmentId={activeSegment?.id || null}
+          segments={Object.values(workspace.segments).filter(s => s.draftId === activeProject.activeDraftId)}
+          versionDag={activeVersionDag}
+          trashCount={workspace.trash.length}
+          vaultItemCount={currentProjectVaultItems.length}
+          activeView={activeView}
+          onSelectProject={handleSelectProject}
+          onSelectSegment={handleSelectSegment}
+          onSelectView={setActiveView}
+          onOpenVcsModal={() => setIsVcsModalOpen(true)}
+          onOpenTrashModal={() => setIsTrashModalOpen(true)}
+          onNewProject={handleNewProject}
+          onNewSegment={handleNewSegment}
+          onOpenProjectSettings={() => setIsProjectSettingsOpen(true)}
+          onOpenThemeManager={() => setIsThemeManagerOpen(true)}
+          onOpenVisualSettings={() => setIsVisualSettingsOpen(true)}
+        />
+      )}
 
       {/* CENTER WORKSPACE AREA */}
       <main className="flex-1 flex flex-col min-w-0 bg-[#080808] overflow-hidden">
@@ -583,32 +723,132 @@ export default function App() {
             </span>
           </div>
 
-          <div className="flex items-center gap-4 text-xs">
-            <div className="flex items-center gap-1.5 text-[#66625B]">
+          {/* Center Visual View Switcher */}
+          <div className="hidden md:flex items-center bg-[#141414] p-0.5 rounded-lg border border-[#222]">
+            <button
+              onClick={() => setActiveView("editor")}
+              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
+                activeView === "editor"
+                  ? "bg-[#252525] text-[#ECE7DE] font-medium"
+                  : "text-[#66625B] hover:text-[#ECE7DE]"
+              }`}
+            >
+              Editor
+            </button>
+            <button
+              onClick={() => setActiveView("wiki")}
+              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
+                activeView === "wiki"
+                  ? "bg-[#252525] text-[#ECE7DE] font-medium"
+                  : "text-[#66625B] hover:text-[#ECE7DE]"
+              }`}
+            >
+              Wiki
+            </button>
+            <button
+              onClick={() => setActiveView("diagrams")}
+              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
+                activeView === "diagrams"
+                  ? "bg-[#252525] text-[#ECE7DE] font-medium"
+                  : "text-[#66625B] hover:text-[#ECE7DE]"
+              }`}
+            >
+              Graph
+            </button>
+            <button
+              onClick={() => setActiveView("timeline")}
+              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
+                activeView === "timeline"
+                  ? "bg-[#252525] text-[#ECE7DE] font-medium"
+                  : "text-[#66625B] hover:text-[#ECE7DE]"
+              }`}
+            >
+              Timeline
+            </button>
+            <button
+              onClick={() => setActiveView("threads")}
+              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
+                activeView === "threads"
+                  ? "bg-[#252525] text-[#ECE7DE] font-medium"
+                  : "text-[#66625B] hover:text-[#ECE7DE]"
+              }`}
+            >
+              Watchdog
+            </button>
+            <button
+              onClick={() => setActiveView("projectVault")}
+              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
+                activeView === "projectVault"
+                  ? "bg-[#252525] text-[#ECE7DE] font-medium"
+                  : "text-[#66625B] hover:text-[#ECE7DE]"
+              }`}
+            >
+              Vault
+            </button>
+            <button
+              onClick={() => setActiveView("publish")}
+              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
+                activeView === "publish"
+                  ? "bg-[#252525] text-[#ECE7DE] font-medium"
+                  : "text-[#66625B] hover:text-[#ECE7DE]"
+              }`}
+            >
+              Publish
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs">
+            {/* Visual Studio Controls Button */}
+            <button
+              onClick={() => setIsVisualSettingsOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#141414] border border-[#242424] text-[#ECE7DE] hover:bg-[#1c1c1c] transition-colors cursor-pointer"
+              title="Studio Settings & Visual Controls (GUI)"
+            >
+              <Sliders className="w-3.5 h-3.5 text-[#C8A051]" />
+              <span>Controls</span>
+            </button>
+
+            {/* Zen Mode Button */}
+            <button
+              onClick={() => setIsZenMode(!isZenMode)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
+                isZenMode
+                  ? "bg-[#C8A051]/20 border-[#C8A051] text-[#C8A051]"
+                  : "bg-[#141414] border-[#242424] text-[#A09A8F] hover:text-[#ECE7DE]"
+              }`}
+              title={isZenMode ? "Exit Zen Mode" : "Enter Distraction-Free Zen Focus Mode"}
+            >
+              {isZenMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              <span>{isZenMode ? "Exit Zen" : "Zen"}</span>
+            </button>
+
+            <div className="hidden lg:flex items-center gap-1.5 text-[#66625B]">
               {isEgonOnline ? (
                 <>
                   <Wifi className="w-3.5 h-3.5 text-[#7E9F86]" />
-                  <span className="text-[11px] font-mono text-[#7E9F86]">Egon Mind Online</span>
+                  <span className="text-[11px] font-mono text-[#7E9F86]">Egon Online</span>
                 </>
               ) : (
                 <>
                   <WifiOff className="w-3.5 h-3.5 text-[#66625B]" />
-                  <span className="text-[11px] font-mono text-[#66625B]">Egon Mind Standalone</span>
+                  <span className="text-[11px] font-mono text-[#66625B]">Standalone</span>
                 </>
               )}
             </div>
 
-            <button
-              onClick={() => setIsCopilotOpen(!isCopilotOpen)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
-                isCopilotOpen
-                  ? "bg-[#C8A051]/20 border-[#C8A051] text-[#C8A051]"
-                  : "bg-[#141414] border-[#242424] text-[#A09A8F] hover:text-[#ECE7DE]"
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Copilot</span>
-            </button>
+            {!isZenMode && (
+              <button
+                onClick={() => setIsCopilotOpen(!isCopilotOpen)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
+                  isCopilotOpen
+                    ? "bg-[#C8A051]/20 border-[#C8A051] text-[#C8A051]"
+                    : "bg-[#141414] border-[#242424] text-[#A09A8F] hover:text-[#ECE7DE]"
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Copilot</span>
+              </button>
+            )}
           </div>
         </header>
 
@@ -620,9 +860,13 @@ export default function App() {
               threads={workspace.threads}
               wiki={activeWiki}
               versionDag={activeVersionDag}
+              visualSettings={visualSettings}
               onUpdateText={handleUpdateText}
               onCommit={handleCommit}
               onOpenVcsModal={() => setIsVcsModalOpen(true)}
+              onOpenSegmentProperties={() => setIsSegmentSettingsOpen(true)}
+              onToggleZenMode={() => setIsZenMode(!isZenMode)}
+              isZenMode={isZenMode}
             />
           ) : activeView === "publish" ? (
             <PublishStudioView
@@ -791,6 +1035,45 @@ export default function App() {
         trashItems={workspace.trash}
         onClose={() => setIsTrashModalOpen(false)}
         onRestore={handleRestoreFromTrash}
+      />
+
+      {/* MODAL: Studio & Visual Settings (Atmosphere, Typography, Browser Link, Local Backups, Egon) */}
+      <VisualSettingsModal
+        isOpen={isVisualSettingsOpen}
+        onClose={() => setIsVisualSettingsOpen(false)}
+        settings={visualSettings}
+        onUpdateSettings={setVisualSettings}
+        onExportManuscript={handleExportManuscript}
+        onExportBackupJson={handleExportBackupJson}
+        onTriggerBackupSnapshot={handleTriggerBackupSnapshot}
+      />
+
+      {/* MODAL: Project Settings (Title, Genre, Premise, Reader Promise) */}
+      <ProjectSettingsModal
+        isOpen={isProjectSettingsOpen}
+        onClose={() => setIsProjectSettingsOpen(false)}
+        project={activeProject}
+        wiki={activeWiki}
+        onSave={handleSaveProjectSettings}
+      />
+
+      {/* MODAL: Chapter / Segment Metadata */}
+      {activeSegment && (
+        <SegmentMetadataModal
+          isOpen={isSegmentSettingsOpen}
+          onClose={() => setIsSegmentSettingsOpen(false)}
+          segment={activeSegment}
+          onSave={handleSaveSegmentSettings}
+        />
+      )}
+
+      {/* MODAL: Theme Collections Manager */}
+      <ThemeManagerModal
+        isOpen={isThemeManagerOpen}
+        onClose={() => setIsThemeManagerOpen(false)}
+        themes={workspace.themes}
+        onAddTheme={handleAddTheme}
+        onSoftDeleteTheme={handleSoftDeleteTheme}
       />
     </div>
   );

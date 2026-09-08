@@ -17,12 +17,13 @@ import {
   ChevronRight,
   FileText,
   Layers,
-  Archive,
-  Compass,
-  Inbox,
   Share2,
   Globe,
-  Check
+  Check,
+  Settings,
+  Sliders,
+  Inbox,
+  Compass
 } from "lucide-react";
 import { DesktopBridge } from "../../engine/storage/desktopBridge";
 
@@ -43,6 +44,9 @@ interface ThemeProjectNavProps {
   onOpenTrashModal: () => void;
   onNewProject: () => void;
   onNewSegment: () => void;
+  onOpenProjectSettings?: () => void;
+  onOpenThemeManager?: () => void;
+  onOpenVisualSettings?: () => void;
 }
 
 export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
@@ -61,7 +65,10 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
   onOpenVcsModal,
   onOpenTrashModal,
   onNewProject,
-  onNewSegment
+  onNewSegment,
+  onOpenProjectSettings,
+  onOpenThemeManager,
+  onOpenVisualSettings
 }) => {
   const currentProject = projects.find(p => p.id === activeProjectId) || projects[0];
   const activeSegments = segments.filter(s => !s.isArchived).sort((a, b) => a.order - b.order);
@@ -89,13 +96,24 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
         <div className="p-3 border-b border-[#1c1c1c]">
           <div className="text-[10px] uppercase font-bold tracking-wider text-[#66625B] px-2 mb-1.5 flex items-center justify-between">
             <span>Active Project</span>
-            <button
-              onClick={onNewProject}
-              className="text-[#A09A8F] hover:text-[#ECE7DE] flex items-center gap-0.5"
-              title="New Project"
-            >
-              <Plus className="w-3 h-3" />
-            </button>
+            <div className="flex items-center gap-1">
+              {onOpenProjectSettings && (
+                <button
+                  onClick={onOpenProjectSettings}
+                  className="text-[#A09A8F] hover:text-[#C8A051] p-1 rounded hover:bg-[#1c1c1c] cursor-pointer transition-colors"
+                  title="Project & Story Bible Properties (GUI)"
+                >
+                  <Settings className="w-3 h-3" />
+                </button>
+              )}
+              <button
+                onClick={onNewProject}
+                className="text-[#A09A8F] hover:text-[#ECE7DE] p-1 rounded hover:bg-[#1c1c1c] cursor-pointer transition-colors"
+                title="New Project"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            </div>
           </div>
           <select
             value={activeProjectId}
@@ -108,6 +126,40 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Collections / Themes Visual Bar */}
+        <div className="px-3 py-2.5 border-b border-[#1c1c1c] bg-[#0c0c0c]">
+          <div className="flex items-center justify-between px-2 mb-1.5">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-[#66625B]">
+              Collections ({themes.length})
+            </span>
+            {onOpenThemeManager && (
+              <button
+                onClick={onOpenThemeManager}
+                className="text-[#A09A8F] hover:text-[#C8A051] p-0.5 rounded hover:bg-[#1c1c1c] cursor-pointer transition-colors"
+                title="Manage Collections & Themes (GUI)"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+          <div className="space-y-1">
+            {themes.map(t => (
+              <div
+                key={t.id}
+                className="flex items-center justify-between px-2 py-1 rounded-md text-[11px] text-[#A09A8F] hover:bg-[#141414] hover:text-[#ECE7DE] transition-colors"
+              >
+                <div className="flex items-center gap-2 truncate">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.colorBadge || "#C8A051" }} />
+                  <span className="truncate">{t.name}</span>
+                </div>
+                <span className="text-[10px] font-mono text-[#66625B]">
+                  {projects.filter(p => p.themeId === t.id && !p.isArchived).length}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Studio Navigation Tabs */}
@@ -264,8 +316,22 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
         </div>
       </div>
 
-      {/* Bottom Subsystems Bar (VCS + Safety Trash) */}
+      {/* Bottom Subsystems Bar (VCS + Safety Trash + Visual Settings) */}
       <div className="p-3 border-t border-[#1c1c1c] space-y-1.5 bg-[#090909]">
+        {onOpenVisualSettings && (
+          <button
+            onClick={onOpenVisualSettings}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[#141414] hover:bg-[#1c1c1c] border border-[#242424] text-xs text-[#ECE7DE] transition-colors cursor-pointer"
+            title="Studio Settings & Visual Controls"
+          >
+            <div className="flex items-center gap-2">
+              <Sliders className="w-3.5 h-3.5 text-[#C8A051]" />
+              <span className="font-medium">Studio & Visual Controls</span>
+            </div>
+            <span className="text-[10px] font-mono text-[#66625B]">GUI</span>
+          </button>
+        )}
+
         <button
           onClick={onOpenVcsModal}
           className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[#141414] hover:bg-[#1c1c1c] border border-[#202020] text-xs text-[#ECE7DE] transition-colors cursor-pointer"

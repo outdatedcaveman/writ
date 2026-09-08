@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Segment, ThreadEntity, ProjectWiki } from "../../types/workspace";
 import { VersionDAG, AuthorIdentity } from "../../types/versionControl";
+import { VisualSettings, defaultVisualSettings } from "../../types/visualSettings";
 import { computeTextDiff } from "../../engine/vcs/versionTree";
 import { analyzeSegmentMetrics, ManuscriptMetrics } from "../../engine/analysis/metrics";
 import { renderLatexInText } from "../../engine/analysis/latexFormatter";
+import { VisualFormattingToolbar } from "./VisualFormattingToolbar";
 import {
   CheckCircle2,
   GitCommit,
@@ -15,7 +17,10 @@ import {
   ChevronUp,
   User,
   Bot,
-  Sigma
+  Sigma,
+  Edit3,
+  Maximize2,
+  Minimize2
 } from "lucide-react";
 
 interface SegmentEditorProps {
@@ -23,6 +28,7 @@ interface SegmentEditorProps {
   threads: Record<string, ThreadEntity>;
   wiki?: ProjectWiki;
   versionDag: VersionDAG;
+  visualSettings?: VisualSettings;
   onUpdateText: (segmentId: string, text: string) => void;
   onCommit: (params: {
     segmentId: string;
@@ -31,6 +37,9 @@ interface SegmentEditorProps {
     author: AuthorIdentity;
   }) => void;
   onOpenVcsModal: () => void;
+  onOpenSegmentProperties?: () => void;
+  onToggleZenMode?: () => void;
+  isZenMode?: boolean;
 }
 
 export const SegmentEditor: React.FC<SegmentEditorProps> = ({
@@ -38,9 +47,13 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
   threads,
   wiki,
   versionDag,
+  visualSettings = defaultVisualSettings,
   onUpdateText,
   onCommit,
-  onOpenVcsModal
+  onOpenVcsModal,
+  onOpenSegmentProperties,
+  onToggleZenMode,
+  isZenMode = false
 }) => {
   const [localText, setLocalText] = useState(segment.textContent || "");
   const [showDiff, setShowDiff] = useState(false);
@@ -51,6 +64,7 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
   const [metrics, setMetrics] = useState<ManuscriptMetrics>(() =>
     analyzeSegmentMetrics(segment, threads, wiki)
   );
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setLocalText(segment.textContent || "");
@@ -65,6 +79,26 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
     const val = e.target.value;
     setLocalText(val);
     onUpdateText(segment.id, val);
+  };
+
+  const handleInsertMarkdown = (before: string, after: string = "", defaultText: string = "") => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = localText.substring(start, end) || defaultText;
+
+    const replacement = `${before}${selected}${after}`;
+    const newText = localText.substring(0, start) + replacement + localText.substring(end);
+
+    setLocalText(newText);
+    onUpdateText(segment.id, newText);
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + before.length, start + before.length + selected.length);
+    }, 0);
   };
 
   const handleCommitSubmit = (e: React.FormEvent) => {
@@ -88,25 +122,77 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
   const headCommitId = versionDag.branches[versionDag.activeBranch]?.headCommitId;
   const lastSnapshot = headCommitId && versionDag.commits[headCommitId]?.segmentSnapshots[segment.id]
     ? versionDag.commits[headCommitId].segmentSnapshots[segment.id]
-    : segment.textContent;
+    : "";
 
-  const diffResult = showDiff ? computeTextDiff(lastSnapshot, localText, "words") : [];
-  const renderedLatexHtml = showLatex ? renderLatexInText(localText) : "";
+  const diffResult = computeTextDiff(lastSnapshot, localText);
+  const renderedLatexHtml = renderLatexInText(localText);
+
+  // Dynamic Typography & Column styling
+  const fontClass =
+    visualSettings.fontFamily === "jetbrains_mono"
+      ? "font-mono"
+      : visualSettings.fontFamily === "roboto_sans"
+      ? "font-sans"
+      : "font-serif";
+
+  const columnWidthClass =
+    visualSettings.columnWidth === "compact"
+      ? "max-w-xl"
+      : visualSettings.columnWidth === "wide"
+      ? "max-w-4xl"
+      : visualSettings.columnWidth === "full"
+      ? "max-w-full px-6"
+      : "max-w-2xl";
+
+  const atmosphereBg =
+    visualSettings.atmosphere === "paper_noir"
+      ? "#14120E"
+      : visualSettings.atmosphere === "midnight_slate"
+      ? "#0B0E14"
+      : visualSettings.atmosphere === "forest_noir"
+      ? "#09120C"
+      : "#080808";
 
   return (
-    <div className="flex flex-col h-full bg-[#080808] text-[#ECE7DE] relative overflow-hidden">
-      {/* Top Segment Breadcrumb & Goals Header */}
-      <div className="border-b border-[#1c1c1c] bg-[#0c0c0c] px-8 py-4 shrink-0">
-        <div className="flex items-center justify-between mb-2">
+    <div
+      className="flex flex-col h-full rounded-xl border border-[#1c1c1c] overflow-hidden transition-colors"
+      style={{ backgroundColor: atmosphereBg }}
+    >
+      {/* Top Chapter Metadata & Control Strip */}
+      <div className="border-b border-[#1c1c1c] bg-[#0c0c0c]/80 backdrop-blur-sm px-6 py-3 shrink-0">
+        <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2 text-xs">
-            <span className="font-mono text-[#7E9F86] font-semibold">
+            <span className="font-mono text-[#7E9F86] font-semibold text-sm">
               Section {segment.romanNumeral}
             </span>
             <span className="text-[#444]">·</span>
-            <span className="text-[#A09A8F]">{segment.title}</span>
+            <span className="text-[#ECE7DE] font-medium text-sm">{segment.title}</span>
+            {onOpenSegmentProperties && (
+              <button
+                onClick={onOpenSegmentProperties}
+                className="p-1 text-[#66625B] hover:text-[#C8A051] hover:bg-[#1c1c1c] rounded transition-colors cursor-pointer ml-1"
+                title="Edit Chapter Beat & Deliverables (GUI)"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {onToggleZenMode && (
+              <button
+                onClick={onToggleZenMode}
+                className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                  isZenMode
+                    ? "bg-[#C8A051]/20 border-[#C8A051] text-[#C8A051]"
+                    : "bg-[#141414] border-[#242424] text-[#A09A8F] hover:text-[#ECE7DE]"
+                }`}
+                title={isZenMode ? "Exit Zen Focus Mode" : "Enter Zen Focus Mode (Distraction-Free)"}
+              >
+                {isZenMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              </button>
+            )}
+
             <button
               onClick={() => {
                 setShowLatex(!showLatex);
@@ -154,7 +240,7 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
 
         {/* Goals Checklist strip */}
         {segment.goals.length > 0 && (
-          <div className="flex items-center gap-4 text-xs text-[#66625B] pt-2 border-t border-[#161616]">
+          <div className="flex items-center gap-4 text-xs text-[#66625B] pt-1.5 border-t border-[#161616]">
             <span className="text-[10px] uppercase tracking-wider text-[#A09A8F] shrink-0 font-medium">
               Deliverables:
             </span>
@@ -169,6 +255,15 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
           </div>
         )}
       </div>
+
+      {/* Visual Formatting Toolbar (Visual-First GUI) */}
+      <VisualFormattingToolbar
+        onInsertMarkdown={handleInsertMarkdown}
+        wordCount={metrics.totalWords}
+        readingTimeMinutes={metrics.readingTimeMinutes}
+        isMathPreview={showLatex}
+        onToggleMathPreview={() => setShowLatex(!showLatex)}
+      />
 
       {/* Metrics & Diagnostic Collapsible Drawer */}
       {showMetrics && (
@@ -201,27 +296,19 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
               </div>
             </div>
 
-            {/* Qualitative Bullets */}
-            <div className="space-y-2">
-              <span className="text-[10px] uppercase tracking-wider font-bold text-[#A09A8F] block">
-                Qualitative Literary & Structural Diagnostics
-              </span>
-              <div className="grid grid-cols-2 gap-3">
-                {metrics.qualitativeBullets.map((bullet, idx) => (
-                  <div key={idx} className="p-3 rounded-lg bg-[#141414] border border-[#202020] text-xs">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-[#ECE7DE]">{bullet.category}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono uppercase ${
-                        bullet.type === "strength" ? "bg-[#7E9F86]/20 text-[#7E9F86]" : "bg-[#BF614B]/20 text-[#BF614B]"
-                      }`}>
-                        {bullet.type}
-                      </span>
-                    </div>
-                    <p className="text-[#A09A8F]">{bullet.observation}</p>
-                    <p className="text-[#66625B] text-[11px] mt-1 italic">{bullet.recommendation}</p>
-                  </div>
-                ))}
+            {/* Qualitative Feedback Bullets */}
+            <div className="bg-[#141414] p-4 rounded-lg border border-[#202020] space-y-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-[#A09A8F]">
+                <Sparkles className="w-3.5 h-3.5 text-[#C8A051]" />
+                <span>Literary Cadence Diagnostics</span>
               </div>
+              <ul className="text-xs text-[#A09A8F] space-y-1.5 pl-4 list-disc">
+                {metrics.qualitativeBullets.map((bullet, idx) => (
+                  <li key={idx}>
+                    <strong className="text-[#ECE7DE] font-medium">{bullet.category}:</strong> {bullet.observation} {bullet.recommendation}
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>
@@ -229,19 +316,29 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
 
       {/* Main Manuscript Writing Surface */}
       <div className="flex-1 overflow-y-auto px-8 py-8">
-        <div className="max-w-2xl mx-auto">
+        <div className={`${columnWidthClass} mx-auto transition-all`}>
           {showLatex ? (
-            <div className="p-5 rounded-xl bg-[#0c0c0c] border border-[#202020] space-y-4">
+            <div className="p-5 rounded-xl bg-[#0c0c0c]/90 border border-[#202020] space-y-4">
               <div className="text-xs font-mono text-[#6B8FA3] mb-1">
                 LaTeX Math & Typesetting Render
               </div>
               <div
-                className="font-serif text-lg leading-[1.8] text-[#ECE7DE] space-y-4 whitespace-pre-wrap"
+                className={`${fontClass} leading-[${visualSettings.lineHeight}] text-[#ECE7DE] space-y-4 whitespace-pre-wrap`}
+                style={{
+                  fontSize: `${visualSettings.fontSize}px`,
+                  lineHeight: visualSettings.lineHeight
+                }}
                 dangerouslySetInnerHTML={{ __html: renderedLatexHtml }}
               />
             </div>
           ) : showDiff ? (
-            <div className="font-serif text-lg leading-relaxed text-[#ECE7DE] space-y-4 p-4 rounded-xl bg-[#0c0c0c] border border-[#202020]">
+            <div
+              className={`${fontClass} text-[#ECE7DE] space-y-4 p-4 rounded-xl bg-[#0c0c0c]/90 border border-[#202020]`}
+              style={{
+                fontSize: `${visualSettings.fontSize}px`,
+                lineHeight: visualSettings.lineHeight
+              }}
+            >
               <div className="text-xs font-mono text-[#66625B] mb-2">
                 Comparing current buffer against commit: {headCommitId || "initial"}
               </div>
@@ -267,12 +364,17 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
             </div>
           ) : (
             <textarea
+              ref={textareaRef}
               aria-label="Manuscript Editor"
               value={localText}
               onChange={handleTextChange}
               spellCheck
-              placeholder="Begin writing your manuscript here (supports LaTeX math like $E = mc^2$ or $$\int_0^\infty f(x) dx$$)..."
-              className="w-full bg-transparent text-[#ECE7DE] font-serif text-lg leading-[1.8] resize-none focus:outline-none placeholder:text-[#333] selection:bg-[#7E9F86]/30 min-h-[600px]"
+              placeholder="Begin writing your manuscript here (supports visual toolbar buttons, markdown, and LaTeX math like $E = mc^2$)..."
+              style={{
+                fontSize: `${visualSettings.fontSize}px`,
+                lineHeight: visualSettings.lineHeight
+              }}
+              className={`w-full bg-transparent text-[#ECE7DE] ${fontClass} resize-none focus:outline-none placeholder:text-[#333] selection:bg-[#7E9F86]/30 min-h-[600px]`}
             />
           )}
         </div>
