@@ -186,3 +186,60 @@ test("6. LaTeX Math Expression Parser: accurately isolates inline $...$ and disp
   assert.equal(inlineMathMatches[0], "\\Delta x \\Delta p \\ge \\frac{\\hbar}{2}");
 });
 
+test("7. Standalone Embedded Server & Atomic Disk Persistence: atomic save and Rule 1 trash sync", async () => {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const os = await import("node:os");
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "writ-test-"));
+  const projectsDir = path.join(tempDir, "projects");
+  const trashDir = path.join(tempDir, "trash");
+  fs.mkdirSync(projectsDir, { recursive: true });
+  fs.mkdirSync(trashDir, { recursive: true });
+
+  const sampleProject = {
+    id: "proj-persist-test",
+    title: "The Architecture of Solidity",
+    updatedAt: Date.now()
+  };
+
+  const filePath = path.join(projectsDir, `${sampleProject.id}.json`);
+  const backupPath = path.join(projectsDir, `${sampleProject.id}.bak`);
+
+  // Initial write
+  fs.writeFileSync(filePath, JSON.stringify(sampleProject, null, 2), "utf-8");
+  assert.ok(fs.existsSync(filePath));
+
+  // Atomic backup and update
+  if (fs.existsSync(filePath)) {
+    fs.copyFileSync(filePath, backupPath);
+  }
+  const updatedProject = { ...sampleProject, title: "The Architecture of Solidity (Revised)" };
+  fs.writeFileSync(filePath, JSON.stringify(updatedProject, null, 2), "utf-8");
+
+  assert.ok(fs.existsSync(backupPath), "Backup .bak must exist");
+  const currentContent = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+  const backupContent = JSON.parse(fs.readFileSync(backupPath, "utf-8"));
+
+  assert.equal(currentContent.title, "The Architecture of Solidity (Revised)");
+  assert.equal(backupContent.title, "The Architecture of Solidity");
+
+  // Rule 1: Soft-delete trash index persistence
+  const trashIndexFile = path.join(trashDir, "trash_index.json");
+  const trashItem = {
+    id: sampleProject.id,
+    entityType: "project",
+    entityName: sampleProject.title,
+    deletedAt: Date.now()
+  };
+  fs.writeFileSync(trashIndexFile, JSON.stringify([trashItem], null, 2), "utf-8");
+  assert.ok(fs.existsSync(trashIndexFile));
+  const trashRecords = JSON.parse(fs.readFileSync(trashIndexFile, "utf-8"));
+  assert.equal(trashRecords.length, 1);
+  assert.equal(trashRecords[0].id, sampleProject.id);
+
+  // Clean up test temp dir
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+

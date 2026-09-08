@@ -10,6 +10,7 @@ import {
 } from "../../types/workspace";
 import { VersionDAG } from "../../types/versionControl";
 import { VaultSample, StylisticProfile } from "../../types/profileVault";
+import { DesktopBridge } from "./desktopBridge";
 
 const STORAGE_KEY = "writ:desktop:workspace:v1";
 
@@ -448,6 +449,27 @@ export class WorkspaceStore {
     } catch (e) {
       console.warn("Storage write failed:", e);
     }
+
+    // Disk persistence via DesktopBridge (native IPC or embedded HTTP server)
+    try {
+      const activeProj = state.projects.find(p => p.id === state.activeProjectId);
+      if (activeProj) {
+        const fullPayload = {
+          ...activeProj,
+          wiki: state.wikis[activeProj.id],
+          segments: Object.values(state.segments).filter(s => {
+            const draft = state.drafts[s.draftId];
+            return draft ? draft.projectId === activeProj.id : true;
+          }),
+          threads: Object.values(state.threads).filter(t => t.projectId === activeProj.id),
+          vaultItems: state.projectVaultItems[activeProj.id] || [],
+          versionDAG: state.versionDAGs[activeProj.id]
+        };
+        DesktopBridge.getInstance().saveProject(fullPayload as any);
+      }
+    } catch (err) {
+      // Non-blocking disk sync
+    }
   }
 
   private load(): WorkspaceState {
@@ -524,6 +546,12 @@ export class WorkspaceStore {
         ...nextState.projectVaultItems,
         [projId]: items.map(it => it.id === item.id ? { ...it, isArchived: true } : it)
       };
+    }
+
+    try {
+      DesktopBridge.getInstance().archiveToTrash(item);
+    } catch {
+      // Non-blocking trash sync
     }
 
     this.save(nextState);

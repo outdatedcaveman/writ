@@ -20,8 +20,11 @@ import {
   Archive,
   Compass,
   Inbox,
-  Share2
+  Share2,
+  Globe,
+  Check
 } from "lucide-react";
+import { DesktopBridge } from "../../engine/storage/desktopBridge";
 
 interface ThemeProjectNavProps {
   themes: ThemeCollection[];
@@ -63,6 +66,7 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
   const currentProject = projects.find(p => p.id === activeProjectId) || projects[0];
   const activeSegments = segments.filter(s => !s.isArchived).sort((a, b) => a.order - b.order);
   const commitCount = Object.keys(versionDag?.commits || {}).length;
+  const [copiedBrowserUrl, setCopiedBrowserUrl] = useState(false);
 
   return (
     <aside className="w-72 bg-[#0a0a0a] text-[#ECE7DE] border-r border-[#1c1c1c] flex flex-col justify-between select-none shrink-0 h-full">
@@ -285,6 +289,31 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
           </div>
           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#161616]">
             {trashCount} items
+          </span>
+        </button>
+
+        <button
+          onClick={() => {
+            const url = DesktopBridge.getInstance().getServerBaseUrl();
+            navigator.clipboard.writeText(url);
+            setCopiedBrowserUrl(true);
+            setTimeout(() => setCopiedBrowserUrl(false), 2000);
+          }}
+          className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs text-[#7E9F86] hover:bg-[#142318] transition-colors cursor-pointer border border-[#1a2e20]/60 bg-[#0d1710]/40"
+          title="Click to copy local browser link"
+        >
+          <div className="flex items-center gap-2">
+            <Globe className="w-3.5 h-3.5 text-[#7E9F86]" />
+            <span className="font-mono text-[11px]">Server :4983</span>
+          </div>
+          <span className="text-[10px] font-mono flex items-center gap-1">
+            {copiedBrowserUrl ? (
+              <>
+                <Check className="w-3 h-3 text-[#7E9F86]" /> Copied!
+              </>
+            ) : (
+              "Copy Link"
+            )}
           </span>
         </button>
       </div>
