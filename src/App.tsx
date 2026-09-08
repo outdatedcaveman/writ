@@ -706,147 +706,83 @@ export default function App() {
       {/* CENTER WORKSPACE AREA */}
       <main className="flex-1 flex flex-col min-w-0 bg-[#080808] overflow-hidden">
         {/* Top Desktop Studio App Bar */}
-        <header className="h-12 border-b border-[#1c1c1c] bg-[#0c0c0c] px-6 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <h1 className="font-serif text-sm font-medium tracking-wide text-[#ECE7DE]">
+        <header className="h-11 border-b border-[#18181A] bg-[#0A0A0C] px-5 flex items-center justify-between shrink-0 select-none">
+          {/* Left Breadcrumb - Truncated, Never Wraps */}
+          <div className="flex items-center gap-2 min-w-0 mr-4">
+            <span className="font-sans text-xs font-semibold tracking-tight text-[#ECE7DE] truncate max-w-[180px]">
               {activeProject.title}
-            </h1>
-            <span className="text-xs text-[#444]">/</span>
-            <span className="text-xs text-[#A09A8F] capitalize">
+            </span>
+            <span className="text-xs text-[#3F3F46]">/</span>
+            <span className="text-xs text-[#8E8E93] truncate max-w-[260px]">
               {activeView === "editor" && activeSegment
                 ? `Section ${activeSegment.romanNumeral} · ${activeSegment.title}`
                 : activeView === "projectVault"
-                ? "Project Drop Vault & Auto-Arranger"
+                ? "Project Drop Vault"
                 : activeView === "publish"
-                ? "Publishing & Asset Studio"
-                : activeView}
+                ? "Publishing Studio"
+                : activeView === "wiki"
+                ? "Story Bible & Wiki"
+                : activeView === "diagrams"
+                ? "Relationship Graph"
+                : activeView === "timeline"
+                ? "Timeline Matrix"
+                : activeView === "threads"
+                ? "Thread Watchdog"
+                : "Voice Profile Vault"}
             </span>
           </div>
 
-          {/* Center Visual View Switcher */}
-          <div className="hidden md:flex items-center bg-[#141414] p-0.5 rounded-lg border border-[#222]">
-            <button
-              onClick={() => setActiveView("editor")}
-              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
-                activeView === "editor"
-                  ? "bg-[#252525] text-[#ECE7DE] font-medium"
-                  : "text-[#66625B] hover:text-[#ECE7DE]"
-              }`}
-            >
-              Editor
-            </button>
-            <button
-              onClick={() => setActiveView("wiki")}
-              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
-                activeView === "wiki"
-                  ? "bg-[#252525] text-[#ECE7DE] font-medium"
-                  : "text-[#66625B] hover:text-[#ECE7DE]"
-              }`}
-            >
-              Wiki
-            </button>
-            <button
-              onClick={() => setActiveView("diagrams")}
-              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
-                activeView === "diagrams"
-                  ? "bg-[#252525] text-[#ECE7DE] font-medium"
-                  : "text-[#66625B] hover:text-[#ECE7DE]"
-              }`}
-            >
-              Graph
-            </button>
-            <button
-              onClick={() => setActiveView("timeline")}
-              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
-                activeView === "timeline"
-                  ? "bg-[#252525] text-[#ECE7DE] font-medium"
-                  : "text-[#66625B] hover:text-[#ECE7DE]"
-              }`}
-            >
-              Timeline
-            </button>
-            <button
-              onClick={() => setActiveView("threads")}
-              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
-                activeView === "threads"
-                  ? "bg-[#252525] text-[#ECE7DE] font-medium"
-                  : "text-[#66625B] hover:text-[#ECE7DE]"
-              }`}
-            >
-              Watchdog
-            </button>
-            <button
-              onClick={() => setActiveView("projectVault")}
-              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
-                activeView === "projectVault"
-                  ? "bg-[#252525] text-[#ECE7DE] font-medium"
-                  : "text-[#66625B] hover:text-[#ECE7DE]"
-              }`}
-            >
-              Vault
-            </button>
-            <button
-              onClick={() => setActiveView("publish")}
-              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
-                activeView === "publish"
-                  ? "bg-[#252525] text-[#ECE7DE] font-medium"
-                  : "text-[#66625B] hover:text-[#ECE7DE]"
-              }`}
-            >
-              Publish
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 text-xs">
+          {/* Right Controls & Utilities */}
+          <div className="flex items-center gap-2 shrink-0">
             {/* Visual Studio Controls Button */}
             <button
               onClick={() => setIsVisualSettingsOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#141414] border border-[#242424] text-[#ECE7DE] hover:bg-[#1c1c1c] transition-colors cursor-pointer"
-              title="Studio Settings & Visual Controls (GUI)"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#141416] border border-[#222226] text-[#A1A1AA] hover:text-[#ECE7DE] hover:bg-[#1A1A1E] transition-colors cursor-pointer text-xs"
+              title="Studio Settings & Typography Controls"
             >
               <Sliders className="w-3.5 h-3.5 text-[#C8A051]" />
-              <span>Controls</span>
+              <span className="hidden sm:inline">Controls</span>
             </button>
 
             {/* Zen Mode Button */}
             <button
               onClick={() => setIsZenMode(!isZenMode)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-colors cursor-pointer text-xs ${
                 isZenMode
-                  ? "bg-[#C8A051]/20 border-[#C8A051] text-[#C8A051]"
-                  : "bg-[#141414] border-[#242424] text-[#A09A8F] hover:text-[#ECE7DE]"
+                  ? "bg-[#C8A051]/15 border-[#C8A051]/60 text-[#C8A051]"
+                  : "bg-[#141416] border-[#222226] text-[#A1A1AA] hover:text-[#ECE7DE] hover:bg-[#1A1A1E]"
               }`}
               title={isZenMode ? "Exit Zen Mode" : "Enter Distraction-Free Zen Focus Mode"}
             >
               {isZenMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-              <span>{isZenMode ? "Exit Zen" : "Zen"}</span>
+              <span className="hidden sm:inline">{isZenMode ? "Exit Zen" : "Zen"}</span>
             </button>
 
-            <div className="hidden lg:flex items-center gap-1.5 text-[#66625B]">
-              {isEgonOnline ? (
-                <>
-                  <Wifi className="w-3.5 h-3.5 text-[#7E9F86]" />
-                  <span className="text-[11px] font-mono text-[#7E9F86]">Egon Online</span>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="w-3.5 h-3.5 text-[#66625B]" />
-                  <span className="text-[11px] font-mono text-[#66625B]">Standalone</span>
-                </>
-              )}
+            {/* Egon Status Dot */}
+            <div
+              className="flex items-center px-1.5 py-1"
+              title={isEgonOnline ? "Egon Mind: Online & Synced" : "Egon Mind: Standalone Mode"}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isEgonOnline ? "bg-[#7E9F86]" : "bg-[#3F3F46]"
+                }`}
+              />
             </div>
 
+            {/* Copilot Toggle Button */}
             {!isZenMode && (
               <button
                 onClick={() => setIsCopilotOpen(!isCopilotOpen)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-colors cursor-pointer text-xs ${
                   isCopilotOpen
-                    ? "bg-[#C8A051]/20 border-[#C8A051] text-[#C8A051]"
-                    : "bg-[#141414] border-[#242424] text-[#A09A8F] hover:text-[#ECE7DE]"
+                    ? "bg-[#C8A051]/15 border-[#C8A051]/60 text-[#C8A051]"
+                    : "bg-[#141416] border-[#222226] text-[#A1A1AA] hover:text-[#ECE7DE] hover:bg-[#1A1A1E]"
                 }`}
+                title="Toggle AI Copilot"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Copilot</span>
+                <span className="hidden sm:inline">Copilot</span>
               </button>
             )}
           </div>

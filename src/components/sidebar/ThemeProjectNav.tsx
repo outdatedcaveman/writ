@@ -76,31 +76,31 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
   const [copiedBrowserUrl, setCopiedBrowserUrl] = useState(false);
 
   return (
-    <aside className="w-72 bg-[#0a0a0a] text-[#ECE7DE] border-r border-[#1c1c1c] flex flex-col justify-between select-none shrink-0 h-full">
-      {/* Top Header & Project Selector */}
-      <div className="flex flex-col overflow-y-auto">
+    <aside className="w-64 bg-[#0A0A0C] text-[#ECE7DE] border-r border-[#18181A] flex flex-col justify-between select-none shrink-0 h-full">
+      {/* Top Header & Navigation Items */}
+      <div className="flex flex-col overflow-y-auto flex-1">
         {/* Brand Bar */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1c1c1c]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded bg-[#ECE7DE] text-[#080808] flex items-center justify-center font-serif font-bold text-xs">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[#18181A]">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded bg-[#ECE7DE] text-[#080808] flex items-center justify-center font-serif font-bold text-[11px] shadow-sm">
               W
             </div>
-            <span className="font-serif text-sm font-medium tracking-wider">WRIT STUDIO</span>
+            <span className="font-serif text-xs font-semibold tracking-wider text-[#ECE7DE]">WRIT STUDIO</span>
           </div>
-          <span className="text-[10px] font-mono text-[#66625B] px-1.5 py-0.5 rounded bg-[#161616]">
-            v1.0-desktop
+          <span className="text-[10px] font-mono text-[#52525B] px-1.5 py-0.5 rounded bg-[#121214] border border-[#1E1E22]">
+            desktop
           </span>
         </div>
 
         {/* Project Switcher Bar */}
-        <div className="p-3 border-b border-[#1c1c1c]">
-          <div className="text-[10px] uppercase font-bold tracking-wider text-[#66625B] px-2 mb-1.5 flex items-center justify-between">
-            <span>Active Project</span>
+        <div className="p-3 border-b border-[#18181A]">
+          <div className="text-[10px] uppercase font-semibold tracking-wider text-[#71717A] px-1 mb-1.5 flex items-center justify-between">
+            <span>Project</span>
             <div className="flex items-center gap-1">
               {onOpenProjectSettings && (
                 <button
                   onClick={onOpenProjectSettings}
-                  className="text-[#A09A8F] hover:text-[#C8A051] p-1 rounded hover:bg-[#1c1c1c] cursor-pointer transition-colors"
+                  className="text-[#71717A] hover:text-[#C8A051] p-1 rounded hover:bg-[#18181B] cursor-pointer transition-colors"
                   title="Project & Story Bible Properties (GUI)"
                 >
                   <Settings className="w-3 h-3" />
@@ -108,7 +108,7 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
               )}
               <button
                 onClick={onNewProject}
-                className="text-[#A09A8F] hover:text-[#ECE7DE] p-1 rounded hover:bg-[#1c1c1c] cursor-pointer transition-colors"
+                className="text-[#71717A] hover:text-[#ECE7DE] p-1 rounded hover:bg-[#18181B] cursor-pointer transition-colors"
                 title="New Project"
               >
                 <Plus className="w-3 h-3" />
@@ -118,7 +118,7 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
           <select
             value={activeProjectId}
             onChange={e => onSelectProject(e.target.value)}
-            className="w-full bg-[#121212] border border-[#242424] text-xs text-[#ECE7DE] p-2 rounded-lg font-medium focus:outline-none cursor-pointer"
+            className="w-full bg-[#121214] border border-[#222226] text-xs text-[#ECE7DE] p-2 rounded-lg font-medium focus:outline-none focus:border-[#C8A051]/60 cursor-pointer"
           >
             {projects.filter(p => !p.isArchived).map(p => (
               <option key={p.id} value={p.id}>
@@ -128,160 +128,25 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
           </select>
         </div>
 
-        {/* Collections / Themes Visual Bar */}
-        <div className="px-3 py-2.5 border-b border-[#1c1c1c] bg-[#0c0c0c]">
-          <div className="flex items-center justify-between px-2 mb-1.5">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-[#66625B]">
-              Collections ({themes.length})
-            </span>
-            {onOpenThemeManager && (
-              <button
-                onClick={onOpenThemeManager}
-                className="text-[#A09A8F] hover:text-[#C8A051] p-0.5 rounded hover:bg-[#1c1c1c] cursor-pointer transition-colors"
-                title="Manage Collections & Themes (GUI)"
-              >
-                <Plus className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-          <div className="space-y-1">
-            {themes.map(t => (
-              <div
-                key={t.id}
-                className="flex items-center justify-between px-2 py-1 rounded-md text-[11px] text-[#A09A8F] hover:bg-[#141414] hover:text-[#ECE7DE] transition-colors"
-              >
-                <div className="flex items-center gap-2 truncate">
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.colorBadge || "#C8A051" }} />
-                  <span className="truncate">{t.name}</span>
-                </div>
-                <span className="text-[10px] font-mono text-[#66625B]">
-                  {projects.filter(p => p.themeId === t.id && !p.isArchived).length}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Studio Navigation Tabs */}
-        <div className="p-3 border-b border-[#1c1c1c] space-y-1">
-          <button
-            onClick={() => onSelectView("editor")}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-              activeView === "editor"
-                ? "bg-[#1c1c1c] text-[#ECE7DE]"
-                : "text-[#A09A8F] hover:bg-[#121212] hover:text-[#ECE7DE]"
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5 text-[#7E9F86]" />
-            <span>Manuscript Editor</span>
-          </button>
-
-          <button
-            onClick={() => onSelectView("projectVault")}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-              activeView === "projectVault"
-                ? "bg-[#1c1c1c] text-[#ECE7DE]"
-                : "text-[#A09A8F] hover:bg-[#121212] hover:text-[#ECE7DE]"
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <Inbox className="w-3.5 h-3.5 text-[#C8A051]" />
-              <span>Project Drop Vault</span>
+        {/* Chapters / Manuscript Tree (Primary Focus) */}
+        <div className="p-3 border-b border-[#18181A]">
+          <div className="flex items-center justify-between px-1 mb-2">
+            <div className="flex items-center gap-1.5">
+              <FileText className="w-3 h-3 text-[#7E9F86]" />
+              <span className="text-[10px] uppercase font-semibold tracking-wider text-[#71717A]">
+                Manuscript ({activeSegments.length})
+              </span>
             </div>
-            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#161616] text-[#A09A8F]">
-              {vaultItemCount}
-            </span>
-          </button>
-
-          <button
-            onClick={() => onSelectView("publish")}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-              activeView === "publish"
-                ? "bg-[#1c1c1c] text-[#ECE7DE]"
-                : "text-[#A09A8F] hover:bg-[#121212] hover:text-[#ECE7DE]"
-            }`}
-          >
-            <Share2 className="w-3.5 h-3.5 text-[#7E9F86]" />
-            <span>Publish & Integrations</span>
-          </button>
-
-          <button
-            onClick={() => onSelectView("wiki")}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-              activeView === "wiki"
-                ? "bg-[#1c1c1c] text-[#ECE7DE]"
-                : "text-[#A09A8F] hover:bg-[#121212] hover:text-[#ECE7DE]"
-            }`}
-          >
-            <BookOpen className="w-3.5 h-3.5 text-[#6B8FA3]" />
-            <span>Project Wiki & Bible</span>
-          </button>
-
-          <button
-            onClick={() => onSelectView("diagrams")}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-              activeView === "diagrams"
-                ? "bg-[#1c1c1c] text-[#ECE7DE]"
-                : "text-[#A09A8F] hover:bg-[#121212] hover:text-[#ECE7DE]"
-            }`}
-          >
-            <FolderTree className="w-3.5 h-3.5 text-[#C8A051]" />
-            <span>Relationship Graph</span>
-          </button>
-
-          <button
-            onClick={() => onSelectView("timeline")}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-              activeView === "timeline"
-                ? "bg-[#1c1c1c] text-[#ECE7DE]"
-                : "text-[#A09A8F] hover:bg-[#121212] hover:text-[#ECE7DE]"
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5 text-[#7E9F86]" />
-            <span>Timeline Matrix</span>
-          </button>
-
-          <button
-            onClick={() => onSelectView("threads")}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-              activeView === "threads"
-                ? "bg-[#1c1c1c] text-[#ECE7DE]"
-                : "text-[#A09A8F] hover:bg-[#121212] hover:text-[#ECE7DE]"
-            }`}
-          >
-            <Compass className="w-3.5 h-3.5 text-[#BF614B]" />
-            <span>Thread Watchdog</span>
-          </button>
-
-          <button
-            onClick={() => onSelectView("vault")}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-              activeView === "vault"
-                ? "bg-[#1c1c1c] text-[#ECE7DE]"
-                : "text-[#A09A8F] hover:bg-[#121212] hover:text-[#ECE7DE]"
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#C8A051]" />
-            <span>Profile Vault (Voice)</span>
-          </button>
-        </div>
-
-        {/* Chapters / Segments Tree */}
-        <div className="p-3">
-          <div className="flex items-center justify-between px-2 mb-2">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-[#66625B]">
-              Draft Chapters ({activeSegments.length})
-            </span>
             <button
               onClick={onNewSegment}
-              className="text-[#A09A8F] hover:text-[#ECE7DE] p-1 rounded hover:bg-[#161616] cursor-pointer"
+              className="text-[#71717A] hover:text-[#ECE7DE] p-1 rounded hover:bg-[#18181B] cursor-pointer transition-colors"
               title="Add Chapter Segment"
             >
               <Plus className="w-3 h-3" />
             </button>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1 max-h-52 overflow-y-auto pr-1">
             {activeSegments.map(seg => {
               const isSelected = activeSegmentId === seg.id && activeView === "editor";
               const statusDot =
@@ -289,7 +154,9 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
                   ? "bg-[#7E9F86]"
                   : seg.status === "active"
                   ? "bg-[#C8A051]"
-                  : "bg-[#444]";
+                  : "bg-[#52525B]";
+
+              const wordCount = (seg.textContent?.match(/\b\w+\b/g) || []).length;
 
               return (
                 <button
@@ -298,90 +165,219 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
                     onSelectSegment(seg.id);
                     onSelectView("editor");
                   }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-xs transition-colors cursor-pointer ${
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left text-xs transition-colors cursor-pointer group ${
                     isSelected
-                      ? "bg-[#1c1c1c] text-[#ECE7DE] font-medium"
-                      : "text-[#A09A8F] hover:bg-[#121212] hover:text-[#ECE7DE]"
+                      ? "bg-[#18181B] text-[#ECE7DE] font-medium border border-[#27272A]"
+                      : "text-[#A1A1AA] hover:bg-[#121214] hover:text-[#ECE7DE] border border-transparent"
                   }`}
                 >
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusDot}`} />
-                  <span className="font-mono text-[11px] text-[#66625B] shrink-0">
-                    {seg.romanNumeral}.
+                  <div className="flex items-center gap-2 truncate min-w-0">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusDot}`} />
+                    <span className="font-mono text-[10px] text-[#71717A] shrink-0">
+                      {seg.romanNumeral}.
+                    </span>
+                    <span className="truncate">{seg.title}</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-[#52525B] group-hover:text-[#71717A] shrink-0 ml-1.5">
+                    {wordCount > 0 ? `${wordCount}w` : "0w"}
                   </span>
-                  <span className="truncate flex-1">{seg.title}</span>
                 </button>
               );
             })}
           </div>
         </div>
+
+        {/* Project Drop Vault (Flat Global Workspace) */}
+        <div className="p-3 border-b border-[#18181A]">
+          <button
+            onClick={() => onSelectView("projectVault")}
+            className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer border ${
+              activeView === "projectVault"
+                ? "bg-[#18181B] text-[#ECE7DE] border-[#27272A]"
+                : "text-[#A1A1AA] hover:bg-[#121214] hover:text-[#ECE7DE] border-transparent"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Inbox className="w-3.5 h-3.5 text-[#C8A051]" />
+              <span>Project Drop Vault</span>
+            </div>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#121214] text-[#A1A1AA] border border-[#1E1E22]">
+              {vaultItemCount}
+            </span>
+          </button>
+        </div>
+
+        {/* Studio Views & Tools */}
+        <div className="p-3 border-b border-[#18181A] space-y-1">
+          <div className="text-[10px] uppercase font-semibold tracking-wider text-[#71717A] px-1 mb-1.5">
+            Studio Views
+          </div>
+
+          <button
+            onClick={() => onSelectView("publish")}
+            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border ${
+              activeView === "publish"
+                ? "bg-[#18181B] text-[#ECE7DE] border-[#27272A]"
+                : "text-[#A1A1AA] hover:bg-[#121214] hover:text-[#ECE7DE] border-transparent"
+            }`}
+          >
+            <Share2 className="w-3.5 h-3.5 text-[#7E9F86]" />
+            <span>Publish & Export</span>
+          </button>
+
+          <button
+            onClick={() => onSelectView("wiki")}
+            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border ${
+              activeView === "wiki"
+                ? "bg-[#18181B] text-[#ECE7DE] border-[#27272A]"
+                : "text-[#A1A1AA] hover:bg-[#121214] hover:text-[#ECE7DE] border-transparent"
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5 text-[#6B8FA3]" />
+            <span>Story Bible & Wiki</span>
+          </button>
+
+          <button
+            onClick={() => onSelectView("diagrams")}
+            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border ${
+              activeView === "diagrams"
+                ? "bg-[#18181B] text-[#ECE7DE] border-[#27272A]"
+                : "text-[#A1A1AA] hover:bg-[#121214] hover:text-[#ECE7DE] border-transparent"
+            }`}
+          >
+            <FolderTree className="w-3.5 h-3.5 text-[#C8A051]" />
+            <span>Relationship Graph</span>
+          </button>
+
+          <button
+            onClick={() => onSelectView("timeline")}
+            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border ${
+              activeView === "timeline"
+                ? "bg-[#18181B] text-[#ECE7DE] border-[#27272A]"
+                : "text-[#A1A1AA] hover:bg-[#121214] hover:text-[#ECE7DE] border-transparent"
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5 text-[#7E9F86]" />
+            <span>Timeline Matrix</span>
+          </button>
+
+          <button
+            onClick={() => onSelectView("threads")}
+            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border ${
+              activeView === "threads"
+                ? "bg-[#18181B] text-[#ECE7DE] border-[#27272A]"
+                : "text-[#A1A1AA] hover:bg-[#121214] hover:text-[#ECE7DE] border-transparent"
+            }`}
+          >
+            <Compass className="w-3.5 h-3.5 text-[#BF614B]" />
+            <span>Thread Watchdog</span>
+          </button>
+        </div>
+
+        {/* Collections & Voice Profile */}
+        <div className="p-3 space-y-1">
+          <div className="flex items-center justify-between px-1 mb-1.5">
+            <span className="text-[10px] uppercase font-semibold tracking-wider text-[#71717A]">
+              Collections ({themes.length})
+            </span>
+            {onOpenThemeManager && (
+              <button
+                onClick={onOpenThemeManager}
+                className="text-[#71717A] hover:text-[#C8A051] p-0.5 rounded hover:bg-[#18181B] cursor-pointer transition-colors"
+                title="Manage Collections & Themes"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            {themes.map(t => (
+              <div
+                key={t.id}
+                className="flex items-center justify-between px-2 py-1 rounded-md text-[11px] text-[#71717A] hover:bg-[#121214] hover:text-[#ECE7DE] transition-colors"
+              >
+                <div className="flex items-center gap-2 truncate">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.colorBadge || "#C8A051" }} />
+                  <span className="truncate">{t.name}</span>
+                </div>
+                <span className="text-[10px] font-mono text-[#52525B]">
+                  {projects.filter(p => p.themeId === t.id && !p.isArchived).length}
+                </span>
+              </div>
+            ))}
+
+            <button
+              onClick={() => onSelectView("vault")}
+              className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[11px] transition-colors cursor-pointer mt-1 ${
+                activeView === "vault"
+                  ? "bg-[#18181B] text-[#ECE7DE]"
+                  : "text-[#71717A] hover:bg-[#121214] hover:text-[#ECE7DE]"
+              }`}
+            >
+              <Sparkles className="w-3 h-3 text-[#C8A051]" />
+              <span>Profile Vault (Voice)</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Bottom Subsystems Bar (VCS + Safety Trash + Visual Settings) */}
-      <div className="p-3 border-t border-[#1c1c1c] space-y-1.5 bg-[#090909]">
+      <div className="p-3 border-t border-[#18181A] space-y-1.5 bg-[#0A0A0C] shrink-0">
         {onOpenVisualSettings && (
           <button
             onClick={onOpenVisualSettings}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[#141414] hover:bg-[#1c1c1c] border border-[#242424] text-xs text-[#ECE7DE] transition-colors cursor-pointer"
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#121214] hover:bg-[#18181B] border border-[#222226] text-xs text-[#ECE7DE] transition-colors cursor-pointer"
             title="Studio Settings & Visual Controls"
           >
             <div className="flex items-center gap-2">
               <Sliders className="w-3.5 h-3.5 text-[#C8A051]" />
-              <span className="font-medium">Studio & Visual Controls</span>
+              <span className="font-medium">Studio Controls</span>
             </div>
-            <span className="text-[10px] font-mono text-[#66625B]">GUI</span>
+            <span className="text-[10px] font-mono text-[#71717A]">GUI</span>
           </button>
         )}
 
         <button
           onClick={onOpenVcsModal}
-          className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[#141414] hover:bg-[#1c1c1c] border border-[#202020] text-xs text-[#ECE7DE] transition-colors cursor-pointer"
+          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#121214] hover:bg-[#18181B] border border-[#1E1E22] text-xs text-[#ECE7DE] transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-2">
             <GitFork className="w-3.5 h-3.5 text-[#7E9F86]" />
             <span className="font-medium">Version Tree</span>
           </div>
-          <span className="text-[10px] font-mono text-[#A09A8F]">
-            {commitCount} commits ({versionDag?.activeBranch || "main"})
+          <span className="text-[10px] font-mono text-[#71717A]">
+            {commitCount} commits
           </span>
         </button>
 
-        <button
-          onClick={onOpenTrashModal}
-          className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs text-[#66625B] hover:text-[#A09A8F] hover:bg-[#121212] transition-colors cursor-pointer"
-        >
-          <div className="flex items-center gap-2">
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Safety Archive</span>
-          </div>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#161616]">
-            {trashCount} items
-          </span>
-        </button>
+        <div className="flex items-center gap-1.5 pt-0.5">
+          <button
+            onClick={onOpenTrashModal}
+            className="flex-1 flex items-center justify-between px-2 py-1 rounded-md text-[11px] text-[#71717A] hover:text-[#ECE7DE] hover:bg-[#141416] transition-colors cursor-pointer"
+            title="Safety Archive"
+          >
+            <div className="flex items-center gap-1.5">
+              <Trash2 className="w-3 h-3 text-[#52525B]" />
+              <span>Safety Trash</span>
+            </div>
+            <span className="text-[10px] font-mono text-[#52525B]">{trashCount}</span>
+          </button>
 
-        <button
-          onClick={() => {
-            const url = DesktopBridge.getInstance().getServerBaseUrl();
-            navigator.clipboard.writeText(url);
-            setCopiedBrowserUrl(true);
-            setTimeout(() => setCopiedBrowserUrl(false), 2000);
-          }}
-          className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs text-[#7E9F86] hover:bg-[#142318] transition-colors cursor-pointer border border-[#1a2e20]/60 bg-[#0d1710]/40"
-          title="Click to copy local browser link"
-        >
-          <div className="flex items-center gap-2">
-            <Globe className="w-3.5 h-3.5 text-[#7E9F86]" />
-            <span className="font-mono text-[11px]">Server :4983</span>
-          </div>
-          <span className="text-[10px] font-mono flex items-center gap-1">
-            {copiedBrowserUrl ? (
-              <>
-                <Check className="w-3 h-3 text-[#7E9F86]" /> Copied!
-              </>
-            ) : (
-              "Copy Link"
-            )}
-          </span>
-        </button>
+          <button
+            onClick={() => {
+              const url = DesktopBridge.getInstance().getServerBaseUrl();
+              navigator.clipboard.writeText(url);
+              setCopiedBrowserUrl(true);
+              setTimeout(() => setCopiedBrowserUrl(false), 2000);
+            }}
+            className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-[#7E9F86] hover:bg-[#142318] border border-[#1a2e20]/60 bg-[#0d1710]/40 transition-colors cursor-pointer"
+            title="Click to copy local browser link"
+          >
+            <Globe className="w-3 h-3 text-[#7E9F86]" />
+            <span className="font-mono text-[10px]">{copiedBrowserUrl ? "Copied" : ":4983"}</span>
+          </button>
+        </div>
       </div>
     </aside>
   );

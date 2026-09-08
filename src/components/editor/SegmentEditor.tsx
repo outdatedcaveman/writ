@@ -127,6 +127,9 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
   const diffResult = computeTextDiff(lastSnapshot, localText);
   const renderedLatexHtml = renderLatexInText(localText);
 
+  const [showGoals, setShowGoals] = useState(false);
+  const [isCommitModalOpen, setIsCommitModalOpen] = useState(false);
+
   // Dynamic Typography & Column styling
   const fontClass =
     visualSettings.fontFamily === "jetbrains_mono"
@@ -155,154 +158,54 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
 
   return (
     <div
-      className="flex flex-col h-full rounded-xl border border-[#1c1c1c] overflow-hidden transition-colors"
+      className="flex flex-col h-full rounded-xl border border-[#18181A] overflow-hidden transition-colors"
       style={{ backgroundColor: atmosphereBg }}
     >
-      {/* Top Chapter Metadata & Control Strip */}
-      <div className="border-b border-[#1c1c1c] bg-[#0c0c0c]/80 backdrop-blur-sm px-6 py-3 shrink-0">
-        <div className="flex items-center justify-between mb-1.5">
-          <div className="flex items-center gap-2 text-xs">
-            <span className="font-mono text-[#7E9F86] font-semibold text-sm">
-              Section {segment.romanNumeral}
-            </span>
-            <span className="text-[#444]">·</span>
-            <span className="text-[#ECE7DE] font-medium text-sm">{segment.title}</span>
-            {onOpenSegmentProperties && (
-              <button
-                onClick={onOpenSegmentProperties}
-                className="p-1 text-[#66625B] hover:text-[#C8A051] hover:bg-[#1c1c1c] rounded transition-colors cursor-pointer ml-1"
-                title="Edit Chapter Beat & Deliverables (GUI)"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            {onToggleZenMode && (
-              <button
-                onClick={onToggleZenMode}
-                className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
-                  isZenMode
-                    ? "bg-[#C8A051]/20 border-[#C8A051] text-[#C8A051]"
-                    : "bg-[#141414] border-[#242424] text-[#A09A8F] hover:text-[#ECE7DE]"
-                }`}
-                title={isZenMode ? "Exit Zen Focus Mode" : "Enter Zen Focus Mode (Distraction-Free)"}
-              >
-                {isZenMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-              </button>
-            )}
-
-            <button
-              onClick={() => {
-                setShowLatex(!showLatex);
-                if (showDiff) setShowDiff(false);
-              }}
-              className={`px-2.5 py-1 text-xs rounded-lg border transition-colors flex items-center gap-1.5 cursor-pointer ${
-                showLatex
-                  ? "bg-[#6B8FA3]/20 border-[#6B8FA3] text-[#6B8FA3]"
-                  : "bg-[#141414] border-[#242424] text-[#A09A8F] hover:text-[#ECE7DE]"
-              }`}
-              title="Render LaTeX formulas ($...$ or $$...$$)"
-            >
-              <Sigma className="w-3.5 h-3.5" />
-              <span>{showLatex ? "Raw Text" : "LaTeX Math"}</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setShowDiff(!showDiff);
-                if (showLatex) setShowLatex(false);
-              }}
-              className={`px-2.5 py-1 text-xs rounded-lg border transition-colors flex items-center gap-1.5 cursor-pointer ${
-                showDiff
-                  ? "bg-[#7E9F86]/20 border-[#7E9F86] text-[#7E9F86]"
-                  : "bg-[#141414] border-[#242424] text-[#A09A8F] hover:text-[#ECE7DE]"
-              }`}
-            >
-              <History className="w-3.5 h-3.5" />
-              <span>{showDiff ? "Hide Diff" : "Show Diff"}</span>
-            </button>
-
-            <button
-              onClick={() => setShowMetrics(!showMetrics)}
-              className={`px-2.5 py-1 text-xs rounded-lg border transition-colors flex items-center gap-1.5 cursor-pointer ${
-                showMetrics
-                  ? "bg-[#6B8FA3]/20 border-[#6B8FA3] text-[#6B8FA3]"
-                  : "bg-[#141414] border-[#242424] text-[#A09A8F] hover:text-[#ECE7DE]"
-              }`}
-            >
-              <Sliders className="w-3.5 h-3.5" />
-              <span>Diagnostics ({metrics.totalWords} w)</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Goals Checklist strip */}
-        {segment.goals.length > 0 && (
-          <div className="flex items-center gap-4 text-xs text-[#66625B] pt-1.5 border-t border-[#161616]">
-            <span className="text-[10px] uppercase tracking-wider text-[#A09A8F] shrink-0 font-medium">
-              Deliverables:
-            </span>
-            <div className="flex flex-wrap gap-3">
-              {segment.goals.map((goal, idx) => (
-                <span key={idx} className="flex items-center gap-1.5 text-[#A09A8F]">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-[#7E9F86]" />
-                  <span>{goal}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Visual Formatting Toolbar (Visual-First GUI) */}
+      {/* Visual Formatting Toolbar (Sleek, Compact, Visual-First) */}
       <VisualFormattingToolbar
         onInsertMarkdown={handleInsertMarkdown}
-        wordCount={metrics.totalWords}
-        readingTimeMinutes={metrics.readingTimeMinutes}
         isMathPreview={showLatex}
         onToggleMathPreview={() => setShowLatex(!showLatex)}
       />
 
-      {/* Metrics & Diagnostic Collapsible Drawer */}
+      {/* Literary Cadence Diagnostics Drawer */}
       {showMetrics && (
-        <div className="bg-[#101010] border-b border-[#202020] p-6 shrink-0 transition-all">
-          <div className="max-w-4xl mx-auto space-y-4">
-            <div className="grid grid-cols-4 gap-3 text-center">
-              <div className="bg-[#141414] p-3 rounded-lg border border-[#202020]">
-                <span className="text-[10px] uppercase font-bold text-[#66625B] block">Pacing Cadence</span>
-                <span className="font-serif text-sm font-medium text-[#ECE7DE] mt-1 block">
+        <div className="bg-[#0D0D0F] border-b border-[#1E1E22] p-5 shrink-0 transition-all">
+          <div className="max-w-3xl mx-auto space-y-3">
+            <div className="grid grid-cols-4 gap-2.5 text-center">
+              <div className="bg-[#141416] p-2.5 rounded-lg border border-[#222226]">
+                <span className="text-[10px] uppercase font-bold text-[#71717A] block">Pacing Cadence</span>
+                <span className="font-serif text-xs font-medium text-[#ECE7DE] mt-1 block">
                   {metrics.pacingCadenceLabel}
                 </span>
               </div>
-              <div className="bg-[#141414] p-3 rounded-lg border border-[#202020]">
-                <span className="text-[10px] uppercase font-bold text-[#66625B] block">Avg Sentence</span>
-                <span className="font-mono text-sm text-[#ECE7DE] mt-1 block">
+              <div className="bg-[#141416] p-2.5 rounded-lg border border-[#222226]">
+                <span className="text-[10px] uppercase font-bold text-[#71717A] block">Avg Sentence</span>
+                <span className="font-mono text-xs text-[#ECE7DE] mt-1 block">
                   {metrics.averageSentenceLength} words
                 </span>
               </div>
-              <div className="bg-[#141414] p-3 rounded-lg border border-[#202020]">
-                <span className="text-[10px] uppercase font-bold text-[#66625B] block">Dialogue Ratio</span>
-                <span className="font-mono text-sm text-[#ECE7DE] mt-1 block">
+              <div className="bg-[#141416] p-2.5 rounded-lg border border-[#222226]">
+                <span className="text-[10px] uppercase font-bold text-[#71717A] block">Dialogue Ratio</span>
+                <span className="font-mono text-xs text-[#ECE7DE] mt-1 block">
                   {metrics.dialogueRatioPercent}%
                 </span>
               </div>
-              <div className="bg-[#141414] p-3 rounded-lg border border-[#202020]">
-                <span className="text-[10px] uppercase font-bold text-[#66625B] block">Lexical Richness</span>
-                <span className="font-mono text-sm text-[#ECE7DE] mt-1 block">
+              <div className="bg-[#141416] p-2.5 rounded-lg border border-[#222226]">
+                <span className="text-[10px] uppercase font-bold text-[#71717A] block">Lexical Richness</span>
+                <span className="font-mono text-xs text-[#ECE7DE] mt-1 block">
                   {metrics.lexicalDiversityScore} / 100
                 </span>
               </div>
             </div>
 
-            {/* Qualitative Feedback Bullets */}
-            <div className="bg-[#141414] p-4 rounded-lg border border-[#202020] space-y-2">
-              <div className="flex items-center gap-2 text-xs font-semibold text-[#A09A8F]">
+            {/* Qualitative Cadence Feedback */}
+            <div className="bg-[#141416] p-3.5 rounded-lg border border-[#222226] space-y-1.5">
+              <div className="flex items-center gap-2 text-xs font-semibold text-[#A1A1AA]">
                 <Sparkles className="w-3.5 h-3.5 text-[#C8A051]" />
-                <span>Literary Cadence Diagnostics</span>
+                <span>Cadence & Voice Observations</span>
               </div>
-              <ul className="text-xs text-[#A09A8F] space-y-1.5 pl-4 list-disc">
+              <ul className="text-xs text-[#A1A1AA] space-y-1 pl-4 list-disc">
                 {metrics.qualitativeBullets.map((bullet, idx) => (
                   <li key={idx}>
                     <strong className="text-[#ECE7DE] font-medium">{bullet.category}:</strong> {bullet.observation} {bullet.recommendation}
@@ -314,9 +217,81 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
         </div>
       )}
 
-      {/* Main Manuscript Writing Surface */}
+      {/* Main Manuscript Canvas */}
       <div className="flex-1 overflow-y-auto px-8 py-8">
         <div className={`${columnWidthClass} mx-auto transition-all`}>
+          {/* Document Header (Integrated Directly into the Manuscript Sheet) */}
+          <div className="mb-6 pb-4 border-b border-[#18181A]/60">
+            <div className="flex items-center justify-between text-xs text-[#71717A] font-sans tracking-widest uppercase mb-2">
+              <span className="font-mono font-medium text-[#7E9F86]">Section {segment.romanNumeral}</span>
+
+              {/* Action Toolbar on Document */}
+              <div className="flex items-center gap-2">
+                {segment.goals.length > 0 && (
+                  <button
+                    onClick={() => setShowGoals(!showGoals)}
+                    className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#141416] border border-[#222226] text-[11px] text-[#A1A1AA] hover:text-[#ECE7DE] cursor-pointer transition-colors"
+                    title="Toggle Chapter Deliverables"
+                  >
+                    <CheckCircle2 className="w-3 h-3 text-[#7E9F86]" />
+                    <span>{segment.goals.length} Goals</span>
+                  </button>
+                )}
+
+                {onOpenSegmentProperties && (
+                  <button
+                    onClick={onOpenSegmentProperties}
+                    className="p-1 rounded hover:bg-[#18181B] text-[#71717A] hover:text-[#ECE7DE] cursor-pointer transition-colors"
+                    title="Edit Chapter Beat & Deliverables"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setShowDiff(!showDiff)}
+                  className={`p-1 rounded cursor-pointer transition-colors ${
+                    showDiff ? "bg-[#7E9F86]/15 text-[#7E9F86]" : "hover:bg-[#18181B] text-[#71717A] hover:text-[#ECE7DE]"
+                  }`}
+                  title={showDiff ? "Hide Git Diff" : "Show Git Diff vs Last Commit"}
+                >
+                  <History className="w-3.5 h-3.5" />
+                </button>
+
+                <button
+                  onClick={() => setShowMetrics(!showMetrics)}
+                  className={`p-1 rounded cursor-pointer transition-colors ${
+                    showMetrics ? "bg-[#C8A051]/15 text-[#C8A051]" : "hover:bg-[#18181B] text-[#71717A] hover:text-[#ECE7DE]"
+                  }`}
+                  title="Toggle Literary Cadence Diagnostics"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Elegant Document Title */}
+            <h1 className="font-serif text-2xl md:text-3xl font-medium tracking-tight text-[#ECE7DE]">
+              {segment.title}
+            </h1>
+
+            {/* Collapsible Goals Box */}
+            {showGoals && segment.goals.length > 0 && (
+              <div className="mt-3 p-3 rounded-lg bg-[#141416] border border-[#222226] text-xs text-[#A1A1AA] space-y-1.5">
+                <span className="text-[10px] uppercase tracking-wider text-[#71717A] font-semibold block">
+                  Chapter Goals & Deliverables
+                </span>
+                {segment.goals.map((g, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <CheckCircle2 className="w-3 h-3 text-[#7E9F86] shrink-0" />
+                    <span>{g}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Manuscript Text Surface */}
           {showLatex ? (
             <div className="p-5 rounded-xl bg-[#0c0c0c]/90 border border-[#202020] space-y-4">
               <div className="text-xs font-mono text-[#6B8FA3] mb-1">
@@ -369,68 +344,139 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
               value={localText}
               onChange={handleTextChange}
               spellCheck
-              placeholder="Begin writing your manuscript here (supports visual toolbar buttons, markdown, and LaTeX math like $E = mc^2$)..."
+              placeholder="Begin writing your manuscript here..."
               style={{
                 fontSize: `${visualSettings.fontSize}px`,
                 lineHeight: visualSettings.lineHeight
               }}
-              className={`w-full bg-transparent text-[#ECE7DE] ${fontClass} resize-none focus:outline-none placeholder:text-[#333] selection:bg-[#7E9F86]/30 min-h-[600px]`}
+              className={`w-full bg-transparent text-[#ECE7DE] ${fontClass} resize-none focus:outline-none placeholder:text-[#2A2A2E] selection:bg-[#7E9F86]/30 min-h-[600px]`}
             />
           )}
         </div>
       </div>
 
-      {/* Bottom Version Control Commit Bar */}
-      <div className="border-t border-[#1c1c1c] bg-[#0c0c0c] px-8 py-3 shrink-0 flex items-center justify-between">
-        <form onSubmit={handleCommitSubmit} className="flex items-center gap-3 flex-1 max-w-2xl">
-          <div className="flex items-center bg-[#141414] p-0.5 rounded-lg border border-[#242424]">
-            <button
-              type="button"
-              onClick={() => setAuthorType("human")}
-              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
-                authorType === "human" ? "bg-[#282828] text-[#ECE7DE]" : "text-[#66625B]"
-              }`}
-            >
-              <User className="w-3 h-3 text-[#7E9F86]" />
-              <span>Bruno (Human)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setAuthorType("ai_copilot")}
-              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
-                authorType === "ai_copilot" ? "bg-[#282828] text-[#ECE7DE]" : "text-[#66625B]"
-              }`}
-            >
-              <Bot className="w-3 h-3 text-[#6B8FA3]" />
-              <span>Machine / AI</span>
-            </button>
-          </div>
+      {/* Quiet, Distraction-Free Bottom Status Bar */}
+      <div className="h-9 border-t border-[#18181A] bg-[#0A0A0C] px-6 shrink-0 flex items-center justify-between text-xs text-[#71717A] select-none font-sans">
+        {/* Left Metrics & Save Status */}
+        <div className="flex items-center gap-3">
+          <span className="text-[#A1A1AA] font-medium">{metrics.totalWords.toLocaleString()} words</span>
+          <span>·</span>
+          <span>~{metrics.readingTimeMinutes} min read</span>
+          <span>·</span>
+          <span className="text-[#52525B]">Cadence: {metrics.pacingCadenceLabel}</span>
+        </div>
 
-          <input
-            type="text"
-            placeholder="Commit message (e.g. Polished dialogue cadence, closed Section III argument)"
-            value={commitMessage}
-            onChange={e => setCommitMessage(e.target.value)}
-            className="flex-1 bg-[#121212] border border-[#202020] text-xs text-[#ECE7DE] px-3 py-1.5 rounded-lg focus:outline-none"
-          />
-
+        {/* Right Version Control & Author Actions */}
+        <div className="flex items-center gap-3">
+          {/* Author Badge (Click to toggle) */}
           <button
-            type="submit"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#ECE7DE] text-[#080808] text-xs font-medium hover:bg-white transition-colors cursor-pointer shrink-0"
+            onClick={() => setAuthorType(authorType === "human" ? "ai_copilot" : "human")}
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] hover:bg-[#18181B] text-[#A1A1AA] hover:text-[#ECE7DE] cursor-pointer transition-colors"
+            title="Click to toggle Human / AI author attribution"
           >
-            <GitCommit className="w-3.5 h-3.5" />
-            <span>Record Commit</span>
+            {authorType === "human" ? (
+              <>
+                <User className="w-3 h-3 text-[#7E9F86]" />
+                <span>Bruno</span>
+              </>
+            ) : (
+              <>
+                <Bot className="w-3 h-3 text-[#6B8FA3]" />
+                <span>Machine / AI</span>
+              </>
+            )}
           </button>
-        </form>
 
-        <button
-          onClick={onOpenVcsModal}
-          className="text-xs text-[#66625B] hover:text-[#A09A8F] flex items-center gap-1.5 cursor-pointer ml-4"
-        >
-          <History className="w-3.5 h-3.5" />
-          <span>View Revision Tree</span>
-        </button>
+          <span>·</span>
+
+          {/* Branch link */}
+          <button
+            onClick={onOpenVcsModal}
+            className="flex items-center gap-1 text-[11px] hover:text-[#ECE7DE] cursor-pointer transition-colors"
+            title="Open Version Control DAG Tree"
+          >
+            <History className="w-3 h-3 text-[#C8A051]" />
+            <span>{versionDag.activeBranch} ({Object.keys(versionDag?.commits || {}).length} commits)</span>
+          </button>
+
+          {/* Quick Commit Trigger Button */}
+          <button
+            onClick={() => setIsCommitModalOpen(true)}
+            className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#18181B] hover:bg-[#27272A] border border-[#27272A] text-[#ECE7DE] hover:text-white text-[11px] font-medium cursor-pointer transition-colors ml-1"
+            title="Record Version Control Snapshot (Ctrl+S / Commit)"
+          >
+            <GitCommit className="w-3 h-3 text-[#7E9F86]" />
+            <span>Commit</span>
+          </button>
+        </div>
       </div>
+
+      {/* Modal / Dialog for Commit Snapshot */}
+      {isCommitModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#121214] border border-[#27272A] rounded-xl p-5 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-serif text-sm font-semibold text-[#ECE7DE]">
+                <GitCommit className="w-4 h-4 text-[#7E9F86]" />
+                <span>Record Version Snapshot</span>
+              </div>
+              <button
+                onClick={() => setIsCommitModalOpen(false)}
+                className="text-[#71717A] hover:text-[#ECE7DE] text-xs cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={e => {
+                handleCommitSubmit(e);
+                setIsCommitModalOpen(false);
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="text-[11px] uppercase tracking-wider text-[#71717A] font-semibold block mb-1">
+                  Commit Note / Intention
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="e.g. Polished dialogue cadence, closed Section III argument"
+                  value={commitMessage}
+                  onChange={e => setCommitMessage(e.target.value)}
+                  className="w-full bg-[#18181A] border border-[#27272A] rounded-lg px-3 py-2 text-xs text-[#ECE7DE] focus:border-[#C8A051] focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <div className="flex items-center gap-2 text-xs text-[#71717A]">
+                  <span>Author:</span>
+                  <span className="text-[#ECE7DE] font-medium capitalize">
+                    {authorType === "human" ? "Bruno (Human)" : "AI Copilot"}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsCommitModalOpen(false)}
+                    className="px-3 py-1.5 rounded-lg text-xs text-[#71717A] hover:text-[#ECE7DE] cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 rounded-lg bg-[#ECE7DE] text-[#080808] text-xs font-semibold hover:bg-white cursor-pointer transition-colors"
+                  >
+                    Save Snapshot
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
