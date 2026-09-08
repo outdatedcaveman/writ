@@ -19,7 +19,8 @@ import {
   Layers,
   Archive,
   Compass,
-  Inbox
+  Inbox,
+  Share2
 } from "lucide-react";
 
 interface ThemeProjectNavProps {
@@ -31,10 +32,10 @@ interface ThemeProjectNavProps {
   versionDag: VersionDAG;
   trashCount: number;
   vaultItemCount: number;
-  activeView: "editor" | "wiki" | "diagrams" | "timeline" | "threads" | "projectVault" | "vault";
+  activeView: "editor" | "wiki" | "diagrams" | "timeline" | "threads" | "projectVault" | "vault" | "publish";
   onSelectProject: (projectId: string) => void;
   onSelectSegment: (segmentId: string) => void;
-  onSelectView: (view: "editor" | "wiki" | "diagrams" | "timeline" | "threads" | "projectVault" | "vault") => void;
+  onSelectView: (view: "editor" | "wiki" | "diagrams" | "timeline" | "threads" | "projectVault" | "vault" | "publish") => void;
   onOpenVcsModal: () => void;
   onOpenTrashModal: () => void;
   onNewProject: () => void;
@@ -134,6 +135,18 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
             <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#161616] text-[#A09A8F]">
               {vaultItemCount}
             </span>
+          </button>
+
+          <button
+            onClick={() => onSelectView("publish")}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+              activeView === "publish"
+                ? "bg-[#1c1c1c] text-[#ECE7DE]"
+                : "text-[#A09A8F] hover:bg-[#121212] hover:text-[#ECE7DE]"
+            }`}
+          >
+            <Share2 className="w-3.5 h-3.5 text-[#7E9F86]" />
+            <span>Publish & Integrations</span>
           </button>
 
           <button
@@ -249,7 +262,6 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
 
       {/* Bottom Subsystems Bar (VCS + Safety Trash) */}
       <div className="p-3 border-t border-[#1c1c1c] space-y-1.5 bg-[#090909]">
-        {/* Version Control DAG trigger */}
         <button
           onClick={onOpenVcsModal}
           className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[#141414] hover:bg-[#1c1c1c] border border-[#202020] text-xs text-[#ECE7DE] transition-colors cursor-pointer"
@@ -263,7 +275,6 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
           </span>
         </button>
 
-        {/* Safety Trash Drawer trigger (Rule 1) */}
         <button
           onClick={onOpenTrashModal}
           className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs text-[#66625B] hover:text-[#A09A8F] hover:bg-[#121212] transition-colors cursor-pointer"

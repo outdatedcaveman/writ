@@ -9,6 +9,7 @@ import { TimelineMatrix } from "./components/visualizers/TimelineMatrix";
 import { ThreadVisualizer } from "./components/visualizers/ThreadVisualizer";
 import { ProjectVaultView } from "./components/vault/ProjectVaultView";
 import { ProfileVaultView } from "./components/vault/ProfileVaultView";
+import { PublishStudioView } from "./components/publish/PublishStudioView";
 import { VersionTreeModal } from "./components/vcs/VersionTreeModal";
 import { AICopilotSidebar } from "./components/copilot/AICopilotSidebar";
 import { createCommitNode, createNewBranch } from "./engine/vcs/versionTree";
@@ -24,14 +25,15 @@ import {
   GitBranch,
   FileText,
   Sliders,
-  CheckCircle2
+  CheckCircle2,
+  Share2
 } from "lucide-react";
 
 const store = new WorkspaceStore();
 
 export default function App() {
   const [workspace, setWorkspace] = useState<WorkspaceState>(() => store.getState());
-  const [activeView, setActiveView] = useState<"editor" | "wiki" | "diagrams" | "timeline" | "threads" | "projectVault" | "vault">("editor");
+  const [activeView, setActiveView] = useState<"editor" | "wiki" | "diagrams" | "timeline" | "threads" | "projectVault" | "vault" | "publish">("editor");
   const [isCopilotOpen, setIsCopilotOpen] = useState(true);
   const [isVcsModalOpen, setIsVcsModalOpen] = useState(false);
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
@@ -208,7 +210,6 @@ export default function App() {
     updateState(prev => store.restoreFromTrash(trashId, prev));
   };
 
-  // Add Item to Project Vault
   const handleAddProjectVaultItem = (item: {
     type: VaultItemType;
     title: string;
@@ -264,7 +265,6 @@ export default function App() {
     });
   };
 
-  // Incorporate Vault Item into Project structure
   const handleIncorporateVaultItem = (
     itemId: string,
     targetType: string,
@@ -300,7 +300,6 @@ export default function App() {
         });
       }
 
-      // Mark item as placed
       const nextItems = items.map(it => {
         if (it.id === itemId) {
           return {
@@ -313,7 +312,6 @@ export default function App() {
         return it;
       });
 
-      // Automatically record a Version Control Commit for the incorporated thought
       const currentDag = prev.versionDAGs[activeProject.id];
       const { nextDag } = createCommitNode({
         dag: currentDag,
@@ -579,6 +577,8 @@ export default function App() {
                 ? `Section ${activeSegment.romanNumeral} · ${activeSegment.title}`
                 : activeView === "projectVault"
                 ? "Project Drop Vault & Auto-Arranger"
+                : activeView === "publish"
+                ? "Publishing & Asset Studio"
                 : activeView}
             </span>
           </div>
@@ -623,6 +623,21 @@ export default function App() {
               onUpdateText={handleUpdateText}
               onCommit={handleCommit}
               onOpenVcsModal={() => setIsVcsModalOpen(true)}
+            />
+          ) : activeView === "publish" ? (
+            <PublishStudioView
+              project={activeProject}
+              segments={Object.values(workspace.segments).filter(s => s.draftId === activeProject.activeDraftId)}
+              wiki={activeWiki}
+              activeSegment={activeSegment}
+              onDropAssetToVault={(title, type, content, mediaUrl) => {
+                handleAddProjectVaultItem({
+                  title,
+                  type,
+                  content,
+                  mediaUrl
+                });
+              }}
             />
           ) : activeView === "projectVault" ? (
             <ProjectVaultView

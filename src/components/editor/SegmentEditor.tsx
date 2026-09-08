@@ -3,6 +3,7 @@ import { Segment, ThreadEntity, ProjectWiki } from "../../types/workspace";
 import { VersionDAG, AuthorIdentity } from "../../types/versionControl";
 import { computeTextDiff } from "../../engine/vcs/versionTree";
 import { analyzeSegmentMetrics, ManuscriptMetrics } from "../../engine/analysis/metrics";
+import { renderLatexInText } from "../../engine/analysis/latexFormatter";
 import {
   CheckCircle2,
   GitCommit,
@@ -13,7 +14,8 @@ import {
   ChevronDown,
   ChevronUp,
   User,
-  Bot
+  Bot,
+  Sigma
 } from "lucide-react";
 
 interface SegmentEditorProps {
@@ -43,6 +45,7 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
   const [localText, setLocalText] = useState(segment.textContent || "");
   const [showDiff, setShowDiff] = useState(false);
   const [showMetrics, setShowMetrics] = useState(false);
+  const [showLatex, setShowLatex] = useState(false);
   const [commitMessage, setCommitMessage] = useState("");
   const [authorType, setAuthorType] = useState<"human" | "ai_copilot">("human");
   const [metrics, setMetrics] = useState<ManuscriptMetrics>(() =>
@@ -88,6 +91,7 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
     : segment.textContent;
 
   const diffResult = showDiff ? computeTextDiff(lastSnapshot, localText, "words") : [];
+  const renderedLatexHtml = showLatex ? renderLatexInText(localText) : "";
 
   return (
     <div className="flex flex-col h-full bg-[#080808] text-[#ECE7DE] relative overflow-hidden">
@@ -104,7 +108,26 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setShowDiff(!showDiff)}
+              onClick={() => {
+                setShowLatex(!showLatex);
+                if (showDiff) setShowDiff(false);
+              }}
+              className={`px-2.5 py-1 text-xs rounded-lg border transition-colors flex items-center gap-1.5 cursor-pointer ${
+                showLatex
+                  ? "bg-[#6B8FA3]/20 border-[#6B8FA3] text-[#6B8FA3]"
+                  : "bg-[#141414] border-[#242424] text-[#A09A8F] hover:text-[#ECE7DE]"
+              }`}
+              title="Render LaTeX formulas ($...$ or $$...$$)"
+            >
+              <Sigma className="w-3.5 h-3.5" />
+              <span>{showLatex ? "Raw Text" : "LaTeX Math"}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setShowDiff(!showDiff);
+                if (showLatex) setShowLatex(false);
+              }}
               className={`px-2.5 py-1 text-xs rounded-lg border transition-colors flex items-center gap-1.5 cursor-pointer ${
                 showDiff
                   ? "bg-[#7E9F86]/20 border-[#7E9F86] text-[#7E9F86]"
@@ -207,7 +230,17 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
       {/* Main Manuscript Writing Surface */}
       <div className="flex-1 overflow-y-auto px-8 py-8">
         <div className="max-w-2xl mx-auto">
-          {showDiff ? (
+          {showLatex ? (
+            <div className="p-5 rounded-xl bg-[#0c0c0c] border border-[#202020] space-y-4">
+              <div className="text-xs font-mono text-[#6B8FA3] mb-1">
+                LaTeX Math & Typesetting Render
+              </div>
+              <div
+                className="font-serif text-lg leading-[1.8] text-[#ECE7DE] space-y-4 whitespace-pre-wrap"
+                dangerouslySetInnerHTML={{ __html: renderedLatexHtml }}
+              />
+            </div>
+          ) : showDiff ? (
             <div className="font-serif text-lg leading-relaxed text-[#ECE7DE] space-y-4 p-4 rounded-xl bg-[#0c0c0c] border border-[#202020]">
               <div className="text-xs font-mono text-[#66625B] mb-2">
                 Comparing current buffer against commit: {headCommitId || "initial"}
@@ -238,7 +271,7 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
               value={localText}
               onChange={handleTextChange}
               spellCheck
-              placeholder="Begin writing your manuscript here..."
+              placeholder="Begin writing your manuscript here (supports LaTeX math like $E = mc^2$ or $$\int_0^\infty f(x) dx$$)..."
               className="w-full bg-transparent text-[#ECE7DE] font-serif text-lg leading-[1.8] resize-none focus:outline-none placeholder:text-[#333] selection:bg-[#7E9F86]/30 min-h-[600px]"
             />
           )}
@@ -248,7 +281,6 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
       {/* Bottom Version Control Commit Bar */}
       <div className="border-t border-[#1c1c1c] bg-[#0c0c0c] px-8 py-3 shrink-0 flex items-center justify-between">
         <form onSubmit={handleCommitSubmit} className="flex items-center gap-3 flex-1 max-w-2xl">
-          {/* Author Toggle */}
           <div className="flex items-center bg-[#141414] p-0.5 rounded-lg border border-[#242424]">
             <button
               type="button"

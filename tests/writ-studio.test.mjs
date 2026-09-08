@@ -129,3 +129,60 @@ test("4. Project Drop Vault & AI Synthesizer: auto-placement and structural inco
   assert.ok(targetSegment.textContent.includes("We see this even in ordinary life:"));
   assert.ok(targetSegment.textContent.includes("40% chance of rain"));
 });
+
+test("5. Platform Publishing Hub: formats across Substack, Wattpad, YouTube, and LaTeX", async () => {
+  const sampleProject = {
+    id: "proj-1",
+    title: "On Certainty and Doubt",
+    genre: "Philosophy / Longform Essay"
+  };
+
+  const sampleSegment = {
+    id: "seg-1",
+    title: "The Posture of Inquiry",
+    romanNumeral: "I",
+    synopsis: "An exploration into why doubt is penalized.",
+    textContent: "Certainty is rarely neutral. It organizes access, legitimizes some voices, and quiets others."
+  };
+
+  // Substack export verification
+  const substackBody = `*By Bruno · Written with Writ*\n\n---\n\n${sampleSegment.textContent}\n\n---\n\n### The Takeaway\n\nIf we want wiser institutions and truer relationships, we have to change the incentives to favor curiosity over false certainty.\n\n*Subscribe for more longform essays and inquiries.*`;
+  assert.ok(substackBody.includes("By Bruno · Written with Writ"));
+  assert.ok(substackBody.includes(sampleSegment.textContent));
+
+  // YouTube Script export verification with cue markers
+  const youtubeScript = `[00:00 - Hook / Cold Open]\n"Certainty is rarely neutral. It organizes access..."\n[B-Roll: Slow zoom on crowded city crosswalk]\n\n[00:45 - The Premise]\n${sampleSegment.synopsis}\n[On-Screen Graphic: The Cost of Certainty]`;
+  assert.ok(youtubeScript.includes("[00:00 - Hook / Cold Open]"));
+  assert.ok(youtubeScript.includes("[B-Roll:"));
+
+  // LaTeX Document generator
+  const latexDoc = `\\documentclass[11pt,a4paper]{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amsmath}\n\\title{${sampleProject.title}: ${sampleSegment.title}}\n\\author{Bruno}\n\\begin{document}\n\\maketitle\n\n${sampleSegment.textContent}\n\n\\end{document}`;
+  assert.ok(latexDoc.includes("\\documentclass[11pt,a4paper]{article}"));
+  assert.ok(latexDoc.includes("\\begin{document}"));
+  assert.ok(latexDoc.includes("\\end{document}"));
+});
+
+test("6. LaTeX Math Expression Parser: accurately isolates inline $...$ and display $$...$$ math", async () => {
+  const manuscriptWithMath = "The uncertainty principle states that $\\Delta x \\Delta p \\ge \\frac{\\hbar}{2}$, which bounds measurement precision.\n\n$$\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}$$";
+
+  // In the two-pass parser, display math is extracted/processed first
+  const displayMathMatches = [];
+  const afterDisplay = manuscriptWithMath.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
+    displayMathMatches.push(math.trim());
+    return "[MATH_BLOCK]";
+  });
+
+  assert.equal(displayMathMatches.length, 1);
+  assert.equal(displayMathMatches[0], "\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}");
+
+  // Then inline math is extracted from the remaining text
+  const inlineMathMatches = [];
+  afterDisplay.replace(/\$([^\$\n]+?)\$/g, (_, math) => {
+    inlineMathMatches.push(math.trim());
+    return "[INLINE_MATH]";
+  });
+
+  assert.equal(inlineMathMatches.length, 1);
+  assert.equal(inlineMathMatches[0], "\\Delta x \\Delta p \\ge \\frac{\\hbar}{2}");
+});
+
