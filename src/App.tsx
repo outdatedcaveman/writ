@@ -855,6 +855,7 @@ export default function App() {
               characters={activeWiki?.characters || []}
               threads={Object.values(workspace.threads).filter(t => t.projectId === activeProject.id)}
               plotPoints={activeWiki?.plotPoints || []}
+              macroStructure={activeWiki?.macroStructure}
               onSelectSegment={segId => {
                 handleSelectSegment(segId);
                 setActiveView("editor");

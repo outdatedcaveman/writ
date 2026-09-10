@@ -7,6 +7,13 @@ echo   WRIT DESKTOP STUDIO -- Launching Native Desktop Engine
 echo ========================================================
 echo.
 
+:: If release\win-unpacked\Writ.exe exists, launch it directly
+if exist "release\win-unpacked\Writ.exe" (
+    echo Starting standalone Writ.exe...
+    start "" "release\win-unpacked\Writ.exe"
+    exit /b 0
+)
+
 :: If release\Writ.exe exists, launch it directly
 if exist "release\Writ.exe" (
     echo Starting standalone Writ.exe...

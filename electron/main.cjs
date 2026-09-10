@@ -3,31 +3,62 @@ const path = require('path');
 const fs = require('fs');
 const { startServer, DATA_DIR, PROJECTS_DIR, TRASH_DIR } = require('./server.cjs');
 
+const LOG_FILE = 'c:\\Users\\bruno\\Documents\\Writ\\main_debug.txt';
+function log(msg) {
+  try {
+    fs.appendFileSync(LOG_FILE, `[${new Date().toISOString()}] [PID ${process.pid}] ${msg}\n`);
+  } catch {}
+}
+
 let mainWindow = null;
 let serverInfo = null;
 
+log('App starting');
+
+process.on('uncaughtException', (err) => {
+  log(`UncaughtException: ${err.stack || err.message}`);
+  console.error('[Writ Main UncaughtException]:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  log(`UnhandledRejection: ${reason}`);
+  console.error('[Writ Main UnhandledRejection]:', reason);
+});
+process.on('exit', (code) => {
+  log(`Process exiting with code ${code}`);
+});
+
 // Single instance lock
 const gotTheLock = app.requestSingleInstanceLock();
+log(`requestSingleInstanceLock result: ${gotTheLock}`);
 if (!gotTheLock) {
+  log('Could not obtain single instance lock. Quitting...');
   app.quit();
 } else {
   app.on('second-instance', () => {
+    log('Second instance attempted! Restoring main window...');
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
       mainWindow.focus();
     }
   });
 }
 
 async function createWindow() {
+  log('createWindow: start');
   // Start embedded server first
   try {
     serverInfo = await startServer(4983);
+    log(`createWindow: server running on port ${serverInfo.port}`);
   } catch (err) {
+    log(`createWindow: server failed to start: ${err.message}`);
     console.error('Error starting embedded server:', err);
     serverInfo = { port: 4983, lanIp: '127.0.0.1', token: '' };
   }
 
+  const iconPath = path.join(__dirname, '..', 'assets', 'icon.png');
+
+  log('createWindow: creating BrowserWindow');
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
@@ -36,7 +67,8 @@ async function createWindow() {
     backgroundColor: '#080808',
     title: 'Writ — Literary Studio',
     titleBarStyle: 'default',
-    icon: path.join(__dirname, '..', 'assets', 'icon.png'),
+    show: true,
+    icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
@@ -45,15 +77,40 @@ async function createWindow() {
     }
   });
 
+  mainWindow.webContents.on('render-process-gone', (event, detailed) => {
+    log(`webContents render-process-gone: ${JSON.stringify(detailed)}`);
+  });
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    log(`webContents did-fail-load: code=${errorCode}, desc=${errorDescription}, url=${validatedURL}`);
+  });
+  mainWindow.webContents.on('did-finish-load', () => {
+    log('webContents did-finish-load success');
+  });
+
   // Remove default menu for a clean, distraction-free literary studio look
   mainWindow.setMenuBarVisibility(false);
 
-  const appUrl = `http://localhost:${serverInfo.port}`;
-  console.log(`[Writ Main] Loading UI from: ${appUrl}`);
+  const appUrl = `http://127.0.0.1:${serverInfo.port}`;
+  log(`createWindow: loading appUrl ${appUrl}`);
 
-  await mainWindow.loadURL(appUrl);
+  try {
+    await mainWindow.loadURL(appUrl);
+    log('createWindow: loadURL completed successfully');
+  } catch (err) {
+    log(`createWindow: loadURL failed (${err.message}), trying localFile`);
+    console.warn('[Writ Main] Could not load from server URL, falling back to local dist/index.html:', err);
+    const localIndex = path.join(__dirname, '..', 'dist', 'index.html');
+    if (fs.existsSync(localIndex)) {
+      await mainWindow.loadFile(localIndex);
+      log('createWindow: loadFile completed successfully');
+    }
+  }
+
+  mainWindow.show();
+  mainWindow.focus();
 
   mainWindow.on('closed', () => {
+    log('mainWindow "closed" event fired');
     mainWindow = null;
   });
 }
@@ -108,7 +165,9 @@ ipcMain.handle('select-directory', async () => {
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
+  log('app event: window-all-closed');
   if (process.platform !== 'darwin') {
+    log('app event: window-all-closed -> calling app.quit()');
     app.quit();
   }
 });
