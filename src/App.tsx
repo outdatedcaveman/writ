@@ -24,6 +24,7 @@ import { VisualSettingsModal } from "./components/settings/VisualSettingsModal";
 import { ProjectSettingsModal } from "./components/modals/ProjectSettingsModal";
 import { SegmentMetadataModal } from "./components/modals/SegmentMetadataModal";
 import { ThemeManagerModal } from "./components/modals/ThemeManagerModal";
+import { NewProjectModal } from "./components/modals/NewProjectModal";
 import {
   Sparkles,
   Wifi,
@@ -51,7 +52,71 @@ export default function App() {
   const [isCopilotOpen, setIsCopilotOpen] = useState(true);
   const [isVcsModalOpen, setIsVcsModalOpen] = useState(false);
   const [isTrashModalOpen, setIsTrashModalOpen] = useState(false);
+  const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [isEgonOnline, setIsEgonOnline] = useState<boolean | null>(null);
+
+  // Responsive / Adaptive Panel Widths (Persisted in localStorage)
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        const saved = window.localStorage.getItem("writ:layout:sidebarWidth");
+        if (saved) return Math.max(180, Math.min(600, parseInt(saved, 10)));
+      }
+    } catch {}
+    return 260;
+  });
+
+  const [copilotWidth, setCopilotWidth] = useState<number>(() => {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        const saved = window.localStorage.getItem("writ:layout:copilotWidth");
+        if (saved) return Math.max(260, Math.min(800, parseInt(saved, 10)));
+      }
+    } catch {}
+    return 384;
+  });
+
+  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
+  const [isDraggingCopilot, setIsDraggingCopilot] = useState(false);
+
+  useEffect(() => {
+    if (!isDraggingSidebar && !isDraggingCopilot) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDraggingSidebar) {
+        const newWidth = Math.max(180, Math.min(600, e.clientX));
+        setSidebarWidth(newWidth);
+        try {
+          window.localStorage.setItem("writ:layout:sidebarWidth", String(newWidth));
+        } catch {}
+      } else if (isDraggingCopilot) {
+        const newWidth = Math.max(260, Math.min(800, window.innerWidth - e.clientX));
+        setCopilotWidth(newWidth);
+        try {
+          window.localStorage.setItem("writ:layout:copilotWidth", String(newWidth));
+        } catch {}
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingSidebar(false);
+      setIsDraggingCopilot(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isDraggingSidebar, isDraggingCopilot]);
 
   // Visual Customization & Control Center State
   const [visualSettings, setVisualSettings] = useState<VisualSettings>(() => {
@@ -450,22 +515,26 @@ export default function App() {
     });
   };
 
-  const handleNewProject = () => {
-    const title = prompt("Enter new project title:");
-    if (!title || !title.trim()) return;
-
+  const handleCreateProjectFromModal = (params: {
+    title: string;
+    logline: string;
+    genre: string;
+    themeId: string;
+    intent: string;
+    firstChapterTitle: string;
+  }) => {
     const projId = `proj-${Date.now().toString(36)}`;
     const draftId = `draft-${Date.now().toString(36)}`;
     const segId = `seg-${Date.now().toString(36)}-1`;
 
     const newProject: Project = {
       id: projId,
-      themeId: workspace.themes[0].id,
-      title: title.trim(),
-      slug: title.trim().toLowerCase().replace(/\s+/g, "-"),
-      logline: "New creative inquiry.",
-      genre: "essay",
-      intent: "Explore and articulate a compelling thesis.",
+      themeId: params.themeId || workspace.themes[0]?.id || "theme-default",
+      title: params.title.trim(),
+      slug: params.title.trim().toLowerCase().replace(/\s+/g, "-"),
+      logline: params.logline.trim() || "New creative inquiry.",
+      genre: params.genre as any,
+      intent: params.intent.trim() || "Explore and articulate a compelling thesis.",
       activeDraftId: draftId,
       createdAt: Date.now(),
       updatedAt: Date.now()
@@ -474,7 +543,7 @@ export default function App() {
     const newSegment: Segment = {
       id: segId,
       draftId,
-      title: "Opening Inquest",
+      title: params.firstChapterTitle.trim() || "Opening Inquest",
       romanNumeral: "I",
       order: 1,
       synopsis: "The initial provocation.",
@@ -510,10 +579,10 @@ export default function App() {
         ...prev.wikis,
         [projId]: {
           themeAndPremise: {
-            centralInquiry: "What question animates this work?",
+            centralInquiry: params.logline || "What question animates this work?",
             readerPromise: "Clear and resonant insight.",
             tone: "Reflective and exact.",
-            genre: "essay",
+            genre: params.genre as any,
             targetLength: "3,000 - 5,000 words"
           },
           characters: [],
@@ -541,6 +610,12 @@ export default function App() {
       activeProjectId: projId,
       activeSegmentId: segId
     }));
+    setIsNewProjectModalOpen(false);
+    setActiveView("editor");
+  };
+
+  const handleNewProject = () => {
+    setIsNewProjectModalOpen(true);
   };
 
   const handleNewSegment = () => {
@@ -680,27 +755,45 @@ export default function App() {
     <div className="flex h-screen w-screen bg-[#080808] text-[#ECE7DE] overflow-hidden">
       {/* LEFT NAVIGATION COLUMN (Hidden in Zen Mode) */}
       {!isZenMode && (
-        <ThemeProjectNav
-          themes={workspace.themes}
-          projects={workspace.projects}
-          activeProjectId={activeProject.id}
-          activeSegmentId={activeSegment?.id || null}
-          segments={Object.values(workspace.segments).filter(s => s.draftId === activeProject.activeDraftId)}
-          versionDag={activeVersionDag}
-          trashCount={workspace.trash.length}
-          vaultItemCount={currentProjectVaultItems.length}
-          activeView={activeView}
-          onSelectProject={handleSelectProject}
-          onSelectSegment={handleSelectSegment}
-          onSelectView={setActiveView}
-          onOpenVcsModal={() => setIsVcsModalOpen(true)}
-          onOpenTrashModal={() => setIsTrashModalOpen(true)}
-          onNewProject={handleNewProject}
-          onNewSegment={handleNewSegment}
-          onOpenProjectSettings={() => setIsProjectSettingsOpen(true)}
-          onOpenThemeManager={() => setIsThemeManagerOpen(true)}
-          onOpenVisualSettings={() => setIsVisualSettingsOpen(true)}
-        />
+        <>
+          <ThemeProjectNav
+            width={sidebarWidth}
+            themes={workspace.themes}
+            projects={workspace.projects}
+            activeProjectId={activeProject.id}
+            activeSegmentId={activeSegment?.id || null}
+            segments={Object.values(workspace.segments).filter(s => s.draftId === activeProject.activeDraftId)}
+            versionDag={activeVersionDag}
+            trashCount={workspace.trash.length}
+            vaultItemCount={currentProjectVaultItems.length}
+            activeView={activeView}
+            onSelectProject={handleSelectProject}
+            onSelectSegment={handleSelectSegment}
+            onSelectView={setActiveView}
+            onOpenVcsModal={() => setIsVcsModalOpen(true)}
+            onOpenTrashModal={() => setIsTrashModalOpen(true)}
+            onNewProject={handleNewProject}
+            onNewSegment={handleNewSegment}
+            onOpenProjectSettings={() => setIsProjectSettingsOpen(true)}
+            onOpenThemeManager={() => setIsThemeManagerOpen(true)}
+            onOpenVisualSettings={() => setIsVisualSettingsOpen(true)}
+          />
+          {/* Draggable Vertical Splitter (Sidebar <-> Main Canvas) */}
+          <div
+            onMouseDown={e => {
+              e.preventDefault();
+              setIsDraggingSidebar(true);
+            }}
+            className={`w-1.5 relative shrink-0 cursor-col-resize select-none transition-colors group z-20 ${
+              isDraggingSidebar
+                ? "bg-[#C8A051]"
+                : "bg-transparent hover:bg-[#C8A051]/60 border-r border-[#18181A]"
+            }`}
+            title="Drag to resize sidebar width"
+          >
+            <div className="absolute inset-y-0 -left-1 -right-1" />
+          </div>
+        </>
       )}
 
       {/* CENTER WORKSPACE AREA */}
@@ -848,6 +941,43 @@ export default function App() {
               characters={activeWiki.characters}
               argumentsList={activeWiki.arguments}
               genre={activeProject.genre}
+              segments={Object.values(workspace.segments).filter(s => s.draftId === activeProject.activeDraftId)}
+              onSelectSegment={segId => {
+                handleSelectSegment(segId);
+                setActiveView("editor");
+              }}
+              onAddCharacter={char => {
+                updateState(prev => {
+                  const currentWiki = prev.wikis[activeProject.id];
+                  if (!currentWiki) return prev;
+                  return {
+                    ...prev,
+                    wikis: {
+                      ...prev.wikis,
+                      [activeProject.id]: {
+                        ...currentWiki,
+                        characters: [...currentWiki.characters, char]
+                      }
+                    }
+                  };
+                });
+              }}
+              onAddArgument={arg => {
+                updateState(prev => {
+                  const currentWiki = prev.wikis[activeProject.id];
+                  if (!currentWiki) return prev;
+                  return {
+                    ...prev,
+                    wikis: {
+                      ...prev.wikis,
+                      [activeProject.id]: {
+                        ...currentWiki,
+                        arguments: [...currentWiki.arguments, arg]
+                      }
+                    }
+                  };
+                });
+              }}
             />
           ) : activeView === "timeline" ? (
             <TimelineMatrix
@@ -937,9 +1067,28 @@ export default function App() {
         </div>
       </main>
 
+      {/* Draggable Vertical Splitter (Main Canvas <-> Copilot Drawer) */}
+      {isCopilotOpen && !isZenMode && (
+        <div
+          onMouseDown={e => {
+            e.preventDefault();
+            setIsDraggingCopilot(true);
+          }}
+          className={`w-1.5 relative shrink-0 cursor-col-resize select-none transition-colors group z-20 ${
+            isDraggingCopilot
+              ? "bg-[#C8A051]"
+              : "bg-transparent hover:bg-[#C8A051]/60 border-l border-[#18181A]"
+          }`}
+          title="Drag to resize copilot drawer width"
+        >
+          <div className="absolute inset-y-0 -left-1 -right-1" />
+        </div>
+      )}
+
       {/* RIGHT AI COPILOT SIDEBAR */}
       <AICopilotSidebar
         isOpen={isCopilotOpen}
+        width={copilotWidth}
         project={activeProject}
         activeSegment={activeSegment}
         wiki={activeWiki}
@@ -1011,6 +1160,14 @@ export default function App() {
         themes={workspace.themes}
         onAddTheme={handleAddTheme}
         onSoftDeleteTheme={handleSoftDeleteTheme}
+      />
+
+      {/* MODAL: Visual New Project Dialog */}
+      <NewProjectModal
+        isOpen={isNewProjectModalOpen}
+        themes={workspace.themes}
+        onClose={() => setIsNewProjectModalOpen(false)}
+        onCreateProject={handleCreateProjectFromModal}
       />
     </div>
   );

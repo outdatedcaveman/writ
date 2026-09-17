@@ -103,7 +103,67 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  // Notion Direct API State
+  const [notionToken, setNotionToken] = useState(() => {
+    try { return localStorage.getItem("writ:notion:token") || ""; } catch { return ""; }
+  });
+  const [notionPageId, setNotionPageId] = useState(() => {
+    try { return localStorage.getItem("writ:notion:pageId") || ""; } catch { return ""; }
+  });
+  const [isNotionPublishing, setIsNotionPublishing] = useState(false);
+  const [notionResultUrl, setNotionResultUrl] = useState<string | null>(null);
+  const [notionError, setNotionError] = useState<string | null>(null);
+
+  const handlePublishToNotionDirect = async () => {
+    if (!notionToken.trim()) {
+      setNotionError("Please enter your Notion API Integration Token (starts with secret_...)");
+      return;
+    }
+    if (!notionPageId.trim()) {
+      setNotionError("Please enter your target Notion Page ID or Page URL");
+      return;
+    }
+
+    try {
+      localStorage.setItem("writ:notion:token", notionToken.trim());
+      localStorage.setItem("writ:notion:pageId", notionPageId.trim());
+    } catch {}
+
+    setIsNotionPublishing(true);
+    setNotionError(null);
+    setNotionResultUrl(null);
+
+    // Extract 32-character hex ID if full URL is pasted
+    let pageId = notionPageId.trim();
+    const urlMatch = pageId.match(/([a-f0-9]{32})/i);
+    if (urlMatch) {
+      pageId = urlMatch[1];
+    } else {
+      pageId = pageId.replace(/-/g, "");
+    }
+
+    const res = await platformHub.publishToNotionApi({
+      token: notionToken.trim(),
+      parentPageId: pageId,
+      project,
+      wiki,
+      segments
+    });
+
+    setIsNotionPublishing(false);
+    if (res.success && res.pageUrl) {
+      setNotionResultUrl(res.pageUrl);
+      setPublishedNotice(`Created Notion page: "${project.title}" directly in your workspace!`);
+    } else {
+      setNotionError(res.error || "Failed to publish to Notion. Verify token and page permissions.");
+    }
+  };
+
   const handleSimulatePublish = () => {
+    if (selectedPlatform === "notion") {
+      handlePublishToNotionDirect();
+      return;
+    }
     setPublishedNotice(`Successfully packaged and dispatched to ${selectedPlatform.toUpperCase()}! API payload confirmed.`);
     setTimeout(() => setPublishedNotice(null), 4000);
   };
@@ -224,98 +284,246 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
               </div>
             </div>
 
-            {/* Platform Quick Preset Badges */}
-            <div className="grid grid-cols-6 gap-2">
-              <button
-                onClick={() => {
-                  setSelectedPlatform("substack");
-                  setNaturalPrompt("");
-                }}
-                className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
-                  selectedPlatform === "substack" && !naturalPrompt
-                    ? "bg-[#1c1c1c] border-[#7E9F86] text-[#7E9F86]"
-                    : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
-                }`}
-              >
-                <BookMarked className="w-4 h-4" />
-                <span className="text-xs font-medium">Substack</span>
-              </button>
+            {/* Two Distinct Sections: Platform Integrations vs Document Formats */}
+            <div className="space-y-3">
+              <div className="text-[10px] uppercase font-bold tracking-wider text-[#71717A] px-1">
+                Direct Platform Integrations (Connected Workspaces)
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                <button
+                  onClick={() => {
+                    setSelectedPlatform("notion");
+                    setNaturalPrompt("");
+                  }}
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                    selectedPlatform === "notion" && !naturalPrompt
+                      ? "bg-[#1c1c1c] border-[#ECE7DE] text-[#ECE7DE] shadow-md"
+                      : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
+                  }`}
+                >
+                  <Globe className="w-4 h-4 text-[#ECE7DE]" />
+                  <span className="text-xs font-semibold">Notion (API)</span>
+                  <span className="text-[9px] text-[#71717A]">Direct Page Publish</span>
+                </button>
 
-              <button
-                onClick={() => {
-                  setSelectedPlatform("wattpad");
-                  setNaturalPrompt("");
-                }}
-                className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
-                  selectedPlatform === "wattpad" && !naturalPrompt
-                    ? "bg-[#1c1c1c] border-[#BF614B] text-[#BF614B]"
-                    : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
-                }`}
-              >
-                <FileText className="w-4 h-4" />
-                <span className="text-xs font-medium">Wattpad</span>
-              </button>
+                <button
+                  onClick={() => {
+                    setSelectedPlatform("substack");
+                    setNaturalPrompt("");
+                  }}
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                    selectedPlatform === "substack" && !naturalPrompt
+                      ? "bg-[#1c1c1c] border-[#7E9F86] text-[#7E9F86] shadow-md"
+                      : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
+                  }`}
+                >
+                  <BookMarked className="w-4 h-4 text-[#7E9F86]" />
+                  <span className="text-xs font-semibold">Substack</span>
+                  <span className="text-[9px] text-[#71717A]">Newsletter Draft</span>
+                </button>
 
-              <button
-                onClick={() => {
-                  setSelectedPlatform("notion");
-                  setNaturalPrompt("");
-                }}
-                className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
-                  selectedPlatform === "notion" && !naturalPrompt
-                    ? "bg-[#1c1c1c] border-[#ECE7DE] text-[#ECE7DE]"
-                    : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
-                }`}
-              >
-                <Globe className="w-4 h-4" />
-                <span className="text-xs font-medium">Notion</span>
-              </button>
+                <button
+                  onClick={() => {
+                    setSelectedPlatform("wattpad");
+                    setNaturalPrompt("");
+                  }}
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                    selectedPlatform === "wattpad" && !naturalPrompt
+                      ? "bg-[#1c1c1c] border-[#BF614B] text-[#BF614B] shadow-md"
+                      : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
+                  }`}
+                >
+                  <FileText className="w-4 h-4 text-[#BF614B]" />
+                  <span className="text-xs font-semibold">Wattpad</span>
+                  <span className="text-[9px] text-[#71717A]">Serialized Chapter</span>
+                </button>
 
-              <button
-                onClick={() => {
-                  setSelectedPlatform("youtube");
-                  setNaturalPrompt("");
-                }}
-                className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
-                  selectedPlatform === "youtube" && !naturalPrompt
-                    ? "bg-[#1c1c1c] border-[#BF614B] text-[#BF614B]"
-                    : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
-                }`}
-              >
-                <Tv className="w-4 h-4" />
-                <span className="text-xs font-medium">YouTube</span>
-              </button>
+                <button
+                  onClick={() => {
+                    setSelectedPlatform("youtube");
+                    setNaturalPrompt("");
+                  }}
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                    selectedPlatform === "youtube" && !naturalPrompt
+                      ? "bg-[#1c1c1c] border-[#BF614B] text-[#BF614B] shadow-md"
+                      : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
+                  }`}
+                >
+                  <Tv className="w-4 h-4 text-[#BF614B]" />
+                  <span className="text-xs font-semibold">YouTube</span>
+                  <span className="text-[9px] text-[#71717A]">Script & Timestamps</span>
+                </button>
 
-              <button
-                onClick={() => {
-                  setSelectedPlatform("spotify");
-                  setNaturalPrompt("");
-                }}
-                className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
-                  selectedPlatform === "spotify" && !naturalPrompt
-                    ? "bg-[#1c1c1c] border-[#7E9F86] text-[#7E9F86]"
-                    : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
-                }`}
-              >
-                <Headphones className="w-4 h-4" />
-                <span className="text-xs font-medium">Spotify</span>
-              </button>
+                <button
+                  onClick={() => {
+                    setSelectedPlatform("spotify");
+                    setNaturalPrompt("");
+                  }}
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                    selectedPlatform === "spotify" && !naturalPrompt
+                      ? "bg-[#1c1c1c] border-[#7E9F86] text-[#7E9F86] shadow-md"
+                      : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
+                  }`}
+                >
+                  <Headphones className="w-4 h-4 text-[#7E9F86]" />
+                  <span className="text-xs font-semibold">Spotify / Audio</span>
+                  <span className="text-[9px] text-[#71717A]">Show Notes & Cues</span>
+                </button>
+              </div>
 
-              <button
-                onClick={() => {
-                  setSelectedPlatform("latex");
-                  setNaturalPrompt("");
-                }}
-                className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
-                  selectedPlatform === "latex" && !naturalPrompt
-                    ? "bg-[#1c1c1c] border-[#6B8FA3] text-[#6B8FA3]"
-                    : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
-                }`}
-              >
-                <FileCode className="w-4 h-4" />
-                <span className="text-xs font-medium">LaTeX (PDF)</span>
-              </button>
+              <div className="text-[10px] uppercase font-bold tracking-wider text-[#71717A] px-1 pt-2">
+                Manuscript Document Transpilers
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                <button
+                  onClick={() => {
+                    setSelectedPlatform("latex");
+                    setNaturalPrompt("");
+                  }}
+                  className={`p-2.5 rounded-xl border flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    selectedPlatform === "latex" && !naturalPrompt
+                      ? "bg-[#1c1c1c] border-[#6B8FA3] text-[#6B8FA3] font-medium"
+                      : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
+                  }`}
+                >
+                  <FileCode className="w-4 h-4 text-[#6B8FA3]" />
+                  <span className="text-xs">LaTeX (.tex)</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setSelectedPlatform("epub");
+                    setNaturalPrompt("markdown");
+                  }}
+                  className={`p-2.5 rounded-xl border flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    naturalPrompt === "markdown"
+                      ? "bg-[#1c1c1c] border-[#C8A051] text-[#C8A051] font-medium"
+                      : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
+                  }`}
+                >
+                  <FileText className="w-4 h-4 text-[#C8A051]" />
+                  <span className="text-xs">Markdown (.md)</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setSelectedPlatform("epub");
+                    setNaturalPrompt("html");
+                  }}
+                  className={`p-2.5 rounded-xl border flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    naturalPrompt === "html"
+                      ? "bg-[#1c1c1c] border-[#7E9F86] text-[#7E9F86] font-medium"
+                      : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
+                  }`}
+                >
+                  <Globe className="w-4 h-4 text-[#7E9F86]" />
+                  <span className="text-xs">Clean HTML</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setSelectedPlatform("epub");
+                    setNaturalPrompt("plain text manuscript");
+                  }}
+                  className={`p-2.5 rounded-xl border flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    naturalPrompt === "plain text manuscript"
+                      ? "bg-[#1c1c1c] border-[#ECE7DE] text-[#ECE7DE] font-medium"
+                      : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
+                  }`}
+                >
+                  <BookMarked className="w-4 h-4 text-[#A09A8F]" />
+                  <span className="text-xs">Plain Manuscript</span>
+                </button>
+              </div>
             </div>
+
+            {/* Notion Live API Card when Notion is active */}
+            {selectedPlatform === "notion" && (
+              <div className="p-5 rounded-2xl bg-[#141416] border border-[#27272A] space-y-4 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center font-bold text-xs text-white">
+                      N
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-semibold text-[#ECE7DE]">Notion Workspace Direct Integration</h4>
+                      <p className="text-[11px] text-[#71717A]">
+                        Publish directly as live blocks into your Notion workspace, or copy paste-ready rich Markdown
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#1C1C20] text-[#7E9F86] border border-[#27272A]">
+                    Direct API Active
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] uppercase font-bold tracking-wider text-[#71717A] block mb-1">
+                      Notion Integration Token
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="secret_..."
+                      value={notionToken}
+                      onChange={e => setNotionToken(e.target.value)}
+                      className="w-full bg-[#18181B] border border-[#2A2A2E] rounded-lg px-3 py-1.5 text-xs text-[#ECE7DE] focus:border-[#C8A051] focus:outline-none font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold tracking-wider text-[#71717A] block mb-1">
+                      Target Parent Page ID or URL
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Paste Notion page URL or 32-character ID..."
+                      value={notionPageId}
+                      onChange={e => setNotionPageId(e.target.value)}
+                      className="w-full bg-[#18181B] border border-[#2A2A2E] rounded-lg px-3 py-1.5 text-xs text-[#ECE7DE] focus:border-[#C8A051] focus:outline-none font-mono"
+                    />
+                  </div>
+                </div>
+
+                {notionError && (
+                  <div className="p-3 rounded-lg bg-[#BF614B]/15 border border-[#BF614B]/40 text-xs text-[#BF614B]">
+                    {notionError}
+                  </div>
+                )}
+
+                {notionResultUrl && (
+                  <div className="p-3 rounded-lg bg-[#7E9F86]/15 border border-[#7E9F86]/40 text-xs text-[#7E9F86] flex items-center justify-between">
+                    <span>Page published successfully!</span>
+                    <a href={notionResultUrl} target="_blank" rel="noreferrer" className="underline font-medium hover:text-white">
+                      Open in Notion ↗
+                    </a>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    onClick={handlePublishToNotionDirect}
+                    disabled={isNotionPublishing}
+                    className="px-4 py-2 rounded-lg bg-[#ECE7DE] hover:bg-white text-[#080808] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-50"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{isNotionPublishing ? "Publishing to Notion..." : "Publish Live to Notion"}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(platformHub.formatForNotionClipboard(project, wiki, segments));
+                      setCopied(true);
+                      setPublishedNotice("Copied rich Notion Markdown! Paste directly into Notion and it will render native blocks.");
+                      setTimeout(() => { setCopied(false); setPublishedNotice(null); }, 4000);
+                    }}
+                    className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-[#C8A051]" />
+                    <span>Copy for Instant Paste (Native Notion Blocks)</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Generated Package Preview & Actions */}
             <div className="p-5 rounded-xl border border-[#202020] bg-[#101010] space-y-4">

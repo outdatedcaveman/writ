@@ -131,10 +131,37 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
   const [isCommitModalOpen, setIsCommitModalOpen] = useState(false);
 
   // Dynamic Typography & Column styling
+  const getFontFamilyStyle = () => {
+    switch (visualSettings.fontFamily) {
+      case "source_serif":
+        return "'Source Serif 4', Georgia, serif";
+      case "eb_garamond":
+        return "'EB Garamond', Garamond, Georgia, serif";
+      case "merriweather":
+        return "'Merriweather', Georgia, serif";
+      case "lora":
+        return "'Lora', Georgia, serif";
+      case "literata":
+        return "'Literata', Georgia, serif";
+      case "roboto_sans":
+        return "'Roboto', -apple-system, sans-serif";
+      case "inter":
+        return "'Inter', -apple-system, sans-serif";
+      case "jetbrains_mono":
+        return "'JetBrains Mono', monospace";
+      case "fira_code":
+        return "'Fira Code', monospace";
+      case "custom":
+        return visualSettings.customFontName ? `'${visualSettings.customFontName}', sans-serif` : "inherit";
+      default:
+        return "'Source Serif 4', Georgia, serif";
+    }
+  };
+
   const fontClass =
-    visualSettings.fontFamily === "jetbrains_mono"
+    visualSettings.fontFamily === "jetbrains_mono" || visualSettings.fontFamily === "fira_code"
       ? "font-mono"
-      : visualSettings.fontFamily === "roboto_sans"
+      : visualSettings.fontFamily === "roboto_sans" || visualSettings.fontFamily === "inter"
       ? "font-sans"
       : "font-serif";
 
@@ -271,7 +298,10 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
             </div>
 
             {/* Elegant Document Title */}
-            <h1 className="font-serif text-2xl md:text-3xl font-medium tracking-tight text-[#ECE7DE]">
+            <h1
+              className="text-2xl md:text-3xl font-medium tracking-tight text-[#ECE7DE]"
+              style={{ fontFamily: getFontFamilyStyle() }}
+            >
               {segment.title}
             </h1>
 
@@ -301,7 +331,8 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
                 className={`${fontClass} leading-[${visualSettings.lineHeight}] text-[#ECE7DE] space-y-4 whitespace-pre-wrap`}
                 style={{
                   fontSize: `${visualSettings.fontSize}px`,
-                  lineHeight: visualSettings.lineHeight
+                  lineHeight: visualSettings.lineHeight,
+                  fontFamily: getFontFamilyStyle()
                 }}
                 dangerouslySetInnerHTML={{ __html: renderedLatexHtml }}
               />
@@ -311,7 +342,8 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
               className={`${fontClass} text-[#ECE7DE] space-y-4 p-4 rounded-xl bg-[#0c0c0c]/90 border border-[#202020]`}
               style={{
                 fontSize: `${visualSettings.fontSize}px`,
-                lineHeight: visualSettings.lineHeight
+                lineHeight: visualSettings.lineHeight,
+                fontFamily: getFontFamilyStyle()
               }}
             >
               <div className="text-xs font-mono text-[#66625B] mb-2">
@@ -347,7 +379,8 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
               placeholder="Begin writing your manuscript here..."
               style={{
                 fontSize: `${visualSettings.fontSize}px`,
-                lineHeight: visualSettings.lineHeight
+                lineHeight: visualSettings.lineHeight,
+                fontFamily: getFontFamilyStyle()
               }}
               className={`w-full bg-transparent text-[#ECE7DE] ${fontClass} resize-none focus:outline-none placeholder:text-[#2A2A2E] selection:bg-[#7E9F86]/30 min-h-[600px]`}
             />

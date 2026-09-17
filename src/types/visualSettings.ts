@@ -1,5 +1,15 @@
 export type EditorAtmosphere = "oled_black" | "paper_noir" | "midnight_slate" | "forest_noir";
-export type FontFamilyOption = "source_serif" | "jetbrains_mono" | "roboto_sans" | "merriweather" | "georgia";
+export type FontFamilyOption =
+  | "source_serif"
+  | "eb_garamond"
+  | "merriweather"
+  | "lora"
+  | "literata"
+  | "roboto_sans"
+  | "inter"
+  | "jetbrains_mono"
+  | "fira_code"
+  | "custom";
 export type ColumnWidthOption = "compact" | "standard" | "wide" | "full";
 
 export interface VisualSettings {
@@ -8,6 +18,8 @@ export interface VisualSettings {
   
   // Typography
   fontFamily: FontFamilyOption;
+  customFontName?: string;
+  customFontData?: string;
   fontSize: number; // in pixels (14 to 26)
   lineHeight: number; // 1.5, 1.75, 2.0
   columnWidth: ColumnWidthOption;

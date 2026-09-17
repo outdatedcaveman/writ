@@ -80,6 +80,46 @@ export const ProjectVaultView: React.FC<ProjectVaultViewProps> = ({
     setIsCapturing(false);
   };
 
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
+
+  const handleOpenDropFolder = async () => {
+    try {
+      await fetch("http://localhost:4983/api/vault/open-inbox", { method: "POST" });
+    } catch {}
+  };
+
+  const handleCopyWebhook = () => {
+    const webhookUrl = "http://localhost:4983/api/vault/inbound";
+    navigator.clipboard.writeText(webhookUrl);
+    setCopiedWebhook(true);
+    setTimeout(() => setCopiedWebhook(false), 2000);
+  };
+
+  // Poll for background folder-watcher drops
+  React.useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("http://localhost:4983/api/vault/items");
+        if (res.ok) {
+          const items = await res.json();
+          if (Array.isArray(items) && items.length > 0) {
+            items.forEach(it => {
+              if (!vaultItems.some(existing => existing.id === it.id)) {
+                onAddItem({
+                  type: it.type || "text",
+                  title: it.title || "Dropped Item",
+                  content: it.content || "",
+                  mediaUrl: it.mediaUrl
+                });
+              }
+            });
+          }
+        }
+      } catch {}
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [vaultItems, onAddItem]);
+
   return (
     <div className="flex flex-col h-full bg-[#0d0d0d] text-[#ECE7DE] rounded-xl border border-[#202020] overflow-hidden">
       {/* Header bar */}
@@ -137,6 +177,43 @@ export const ProjectVaultView: React.FC<ProjectVaultViewProps> = ({
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {/* Background Folder Watcher & Inbound Webhook Strip */}
+        <div className="p-4 rounded-xl bg-[#141416] border border-[#27272A] flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#7E9F86] animate-pulse shrink-0" />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-[#ECE7DE]">Folder Watcher Active</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1E1E22] text-[#71717A]">
+                  data\vault_inbox
+                </span>
+              </div>
+              <p className="text-[11px] text-[#71717A] mt-0.5">
+                Drop any text, notes, images, or PDFs into this folder to auto-ingest without clicking or opening the app.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleOpenDropFolder}
+              className="px-3 py-1.5 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
+              title="Open the local drop folder in Windows File Explorer"
+            >
+              <Inbox className="w-3.5 h-3.5 text-[#C8A051]" />
+              <span>Open Drop Folder</span>
+            </button>
+
+            <button
+              onClick={handleCopyWebhook}
+              className="px-3 py-1.5 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#A1A1AA] hover:text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
+              title="Copy Inbound Webhook URL for Apple Shortcuts, Notion automations, or email forwards"
+            >
+              <Link2 className="w-3.5 h-3.5 text-[#7E9F86]" />
+              <span>{copiedWebhook ? "Copied Webhook!" : "Copy Webhook URL"}</span>
+            </button>
+          </div>
+        </div>
         {/* Fast Drop Capture Overlay / Form */}
         {isCapturing && (
           <form onSubmit={handleCaptureSubmit} className="p-5 rounded-xl border border-[#C8A051] bg-[#141414] space-y-3">

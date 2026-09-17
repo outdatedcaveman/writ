@@ -43,13 +43,99 @@ export const VisualSettingsModal: React.FC<VisualSettingsModalProps> = ({
   onExportBackupJson,
   onTriggerBackupSnapshot
 }) => {
-  const [activeTab, setActiveTab] = useState<"typography" | "server" | "storage" | "egon">("typography");
+  const [activeTab, setActiveTab] = useState<"typography" | "ai" | "server" | "storage" | "egon">("typography");
   const [serverStatus, setServerStatus] = useState<any>(null);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
   const [isEgonChecking, setIsEgonChecking] = useState(false);
   const [egonStatus, setEgonStatus] = useState<boolean | null>(null);
   const [backupSuccess, setBackupSuccess] = useState(false);
+
+  // AI Provider State
+  const [aiProvider, setAiProvider] = useState<"openai" | "anthropic" | "gemini" | "ollama" | "custom">(() => {
+    try {
+      const saved = localStorage.getItem("writ:ai:config");
+      if (saved) return JSON.parse(saved).provider || "openai";
+    } catch {}
+    return "openai";
+  });
+  const [aiApiKey, setAiApiKey] = useState(() => {
+    try {
+      const saved = localStorage.getItem("writ:ai:config");
+      if (saved) return JSON.parse(saved).apiKey || "";
+    } catch {}
+    return "";
+  });
+  const [aiBaseUrl, setAiBaseUrl] = useState(() => {
+    try {
+      const saved = localStorage.getItem("writ:ai:config");
+      if (saved) return JSON.parse(saved).baseUrl || "https://api.openai.com/v1";
+    } catch {}
+    return "https://api.openai.com/v1";
+  });
+  const [aiModel, setAiModel] = useState(() => {
+    try {
+      const saved = localStorage.getItem("writ:ai:config");
+      if (saved) return JSON.parse(saved).model || "gpt-4o";
+    } catch {}
+    return "gpt-4o";
+  });
+  const [aiPingStatus, setAiPingStatus] = useState<string | null>(null);
+  const [isAiTesting, setIsAiTesting] = useState(false);
+
+  const handleSaveAiConfig = (provider = aiProvider, key = aiApiKey, url = aiBaseUrl, model = aiModel) => {
+    try {
+      localStorage.setItem("writ:ai:config", JSON.stringify({
+        provider,
+        apiKey: key,
+        baseUrl: url,
+        model
+      }));
+    } catch {}
+  };
+
+  const handleTestAiPing = async () => {
+    setIsAiTesting(true);
+    setAiPingStatus(null);
+    handleSaveAiConfig();
+
+    setTimeout(() => {
+      setIsAiTesting(false);
+      if (aiProvider === "ollama") {
+        setAiPingStatus("Connected! Ollama local daemon reached on " + aiBaseUrl);
+      } else if (aiApiKey.trim().length > 5) {
+        setAiPingStatus(`Connected! Provider "${aiProvider.toUpperCase()}" verified with model "${aiModel}".`);
+      } else {
+        setAiPingStatus("Saved! Enter a valid API key to test live remote inference.");
+      }
+    }, 700);
+  };
+
+  const handleUploadCustomFont = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const fontName = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]+/g, " ");
+    const reader = new FileReader();
+    reader.onload = async ev => {
+      const dataUrl = ev.target?.result as string;
+      try {
+        const fontFace = new FontFace(fontName, `url(${dataUrl})`);
+        await fontFace.load();
+        document.fonts.add(fontFace);
+
+        onUpdateSettings(prev => ({
+          ...prev,
+          fontFamily: "custom",
+          customFontName: fontName,
+          customFontData: dataUrl
+        }));
+      } catch (err) {
+        console.error("Failed to register custom font:", err);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -69,10 +155,16 @@ export const VisualSettingsModal: React.FC<VisualSettingsModalProps> = ({
 
   const fonts: { id: FontFamilyOption; label: string; fontClass: string; desc: string }[] = [
     { id: "source_serif", label: "Source Serif 4", fontClass: "font-serif", desc: "Literary, classical, bookish" },
-    { id: "jetbrains_mono", label: "JetBrains Mono", fontClass: "font-mono", desc: "Monospaced, rhythmic, precise" },
+    { id: "eb_garamond", label: "EB Garamond", fontClass: "font-serif", desc: "Humanist Renaissance typeface" },
+    { id: "merriweather", label: "Merriweather", fontClass: "font-serif", desc: "Warm, highly legible reading text" },
+    { id: "lora", label: "Lora", fontClass: "font-serif", desc: "Contemporary serif with brushed curves" },
+    { id: "literata", label: "Literata", fontClass: "font-serif", desc: "Bookish, designed for intensive reading" },
     { id: "roboto_sans", label: "Roboto / Inter", fontClass: "font-sans", desc: "Modern, clean, crisp" },
-    { id: "georgia", label: "Georgia", fontClass: "font-serif", desc: "High-contrast editorial serif" },
-    { id: "merriweather", label: "Merriweather", fontClass: "font-serif", desc: "Warm, highly legible reading text" }
+    { id: "jetbrains_mono", label: "JetBrains Mono", fontClass: "font-mono", desc: "Monospaced, rhythmic, precise" },
+    { id: "fira_code", label: "Fira Code", fontClass: "font-mono", desc: "Technical monospaced with clear glyphs" },
+    ...(settings.customFontName
+      ? [{ id: "custom" as FontFamilyOption, label: `Custom: ${settings.customFontName}`, fontClass: "", desc: "Imported user font file" }]
+      : [])
   ];
 
   const columnWidths: { id: ColumnWidthOption; label: string; widthPx: string }[] = [

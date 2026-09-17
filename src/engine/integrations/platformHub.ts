@@ -132,7 +132,7 @@ export class PlatformHub {
       {
         object: "block",
         type: "callout",
-        callout: { rich_text: [{ type: "text", text: { content: project.logline } }] }
+        callout: { rich_text: [{ type: "text", text: { content: project.logline } }], icon: { emoji: "📖" } }
       },
       {
         object: "block",
@@ -147,20 +147,147 @@ export class PlatformHub {
         type: "heading_2",
         heading_2: { rich_text: [{ type: "text", text: { content: `Section ${seg.romanNumeral}: ${seg.title}` } }] }
       });
-      notionBlocks.push({
-        object: "block",
-        type: "paragraph",
-        paragraph: { rich_text: [{ type: "text", text: { content: seg.textContent } }] }
+      const paragraphs = seg.textContent.split(/\n\s*\n/).filter(Boolean);
+      paragraphs.forEach(p => {
+        notionBlocks.push({
+          object: "block",
+          type: "paragraph",
+          paragraph: { rich_text: [{ type: "text", text: { content: p.trim() } }] }
+        });
       });
     });
+
+    const pasteableMarkdown = this.formatForNotionClipboard(project, wiki, segments);
 
     return {
       platform: "notion",
       title: project.title,
-      formattedBody: JSON.stringify(notionBlocks, null, 2),
+      formattedBody: pasteableMarkdown,
       metadata: {
-        notionBlocks
+        notionBlocks,
+        description: "Paste directly into Notion, or click 'Publish via Notion API' to auto-create the page in your workspace."
       },
+      deliveryStatus: "ready_to_send"
+    };
+  }
+
+  public formatForNotionClipboard(project: Project, wiki?: ProjectWiki, segments: Segment[] = []): string {
+    let md = `# ${project.title}\n\n> 💡 **Inquiry**: ${project.logline}\n\n---\n\n`;
+    segments.forEach(seg => {
+      md += `## Section ${seg.romanNumeral}: ${seg.title}\n\n`;
+      md += `${seg.textContent}\n\n`;
+    });
+    return md;
+  }
+
+  public async publishToNotionApi(params: {
+    token: string;
+    parentPageId: string;
+    project: Project;
+    wiki?: ProjectWiki;
+    segments: Segment[];
+  }): Promise<{ success: boolean; pageUrl?: string; error?: string }> {
+    try {
+      const cleanParentId = params.parentPageId.replace(/-/g, "").trim();
+      const notionBlocks: any[] = [
+        {
+          object: "block",
+          type: "callout",
+          callout: {
+            rich_text: [{ type: "text", text: { content: params.project.logline || "Published from Writ Literary Studio" } }],
+            icon: { emoji: "📖" }
+          }
+        },
+        {
+          object: "block",
+          type: "divider",
+          divider: {}
+        }
+      ];
+
+      params.segments.forEach(seg => {
+        notionBlocks.push({
+          object: "block",
+          type: "heading_2",
+          heading_2: { rich_text: [{ type: "text", text: { content: `Section ${seg.romanNumeral}: ${seg.title}` } }] }
+        });
+
+        const paragraphs = seg.textContent.split(/\n\s*\n/).filter(Boolean);
+        paragraphs.forEach(p => {
+          notionBlocks.push({
+            object: "block",
+            type: "paragraph",
+            paragraph: { rich_text: [{ type: "text", text: { content: p.trim() } }] }
+          });
+        });
+      });
+
+      const firstChunk = notionBlocks.slice(0, 95);
+
+      const res = await fetch("https://api.notion.com/v1/pages", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${params.token.trim()}`,
+          "Notion-Version": "2022-06-28",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          parent: { page_id: cleanParentId },
+          properties: {
+            title: [
+              {
+                text: { content: params.project.title }
+              }
+            ]
+          },
+          children: firstChunk
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.message || `Notion API response: ${res.status}` };
+      }
+
+      return { success: true, pageUrl: data.url };
+    } catch (err: any) {
+      return { success: false, error: err.message || "Could not reach Notion API" };
+    }
+  }
+
+  public formatForMarkdown(project: Project, segments: Segment[]): PublishPackage {
+    let md = `# ${project.title}\n\n`;
+    if (project.logline) md += `*${project.logline}*\n\n---\n\n`;
+    segments.forEach(seg => {
+      md += `## Section ${seg.romanNumeral}: ${seg.title}\n\n`;
+      md += `${seg.textContent}\n\n`;
+    });
+
+    return {
+      platform: "epub",
+      title: `${project.slug}.md`,
+      formattedBody: md,
+      metadata: { description: "Standard GitHub Flavored Markdown" },
+      deliveryStatus: "ready_to_send"
+    };
+  }
+
+  public formatForHtml(project: Project, segments: Segment[]): PublishPackage {
+    let html = `<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<title>${project.title}</title>\n<style>\nbody { font-family: Georgia, serif; max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.8; color: #222; }\nh1 { font-size: 2.2em; }\nh2 { font-size: 1.4em; border-bottom: 1px solid #eee; padding-bottom: 6px; margin-top: 36px; }\np { margin: 1.2em 0; }\n</style>\n</head>\n<body>\n<h1>${project.title}</h1>\n<p><em>${project.logline}</em></p>\n<hr>\n`;
+    segments.forEach(seg => {
+      html += `<h2>Section ${seg.romanNumeral}: ${seg.title}</h2>\n`;
+      const paras = seg.textContent.split(/\n\s*\n/).filter(Boolean);
+      paras.forEach(p => {
+        html += `<p>${p.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>\n`;
+      });
+    });
+    html += `</body>\n</html>`;
+
+    return {
+      platform: "epub",
+      title: `${project.slug}.html`,
+      formattedBody: html,
+      metadata: { description: "Clean standalone HTML article" },
       deliveryStatus: "ready_to_send"
     };
   }
@@ -174,7 +301,7 @@ export class PlatformHub {
     tex += `\\usepackage{geometry}\n`;
     tex += `\\geometry{margin=1in}\n\n`;
     tex += `\\title{\\textbf{${project.title}}}\n`;
-    tex += `\\author{Bruno \\\\ \\small Writ Desktop Research Studio}\n`;
+    tex += `\\author{Author \\\\ \\small Writ Literary Studio}\n`;
     tex += `\\date{\\today}\n\n`;
     tex += `\\begin{document}\n\n`;
     tex += `\\maketitle\n\n`;
@@ -183,7 +310,6 @@ export class PlatformHub {
     segments.forEach(seg => {
       tex += `\\section{${seg.title}}\n`;
       tex += `\\label{sec:${seg.romanNumeral.toLowerCase()}}\n\n`;
-      // Convert basic paragraph breaks to LaTeX paragraphs
       const paras = seg.textContent.split(/\n\s*\n/).filter(Boolean);
       paras.forEach(p => {
         tex += `${p}\n\n`;

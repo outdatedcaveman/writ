@@ -30,6 +30,7 @@ interface AICopilotSidebarProps {
   onDeconstructAndApply: (rawText: string) => void;
   onGenerateAlternativeBranch: (prompt: string) => void;
   onClose: () => void;
+  width?: number;
 }
 
 interface ChatMessage {
@@ -51,7 +52,8 @@ export const AICopilotSidebar: React.FC<AICopilotSidebarProps> = ({
   onInsertTextIntoActiveSegment,
   onDeconstructAndApply,
   onGenerateAlternativeBranch,
-  onClose
+  onClose,
+  width
 }) => {
   if (!isOpen) return null;
 
@@ -154,7 +156,10 @@ export const AICopilotSidebar: React.FC<AICopilotSidebarProps> = ({
   };
 
   return (
-    <aside className="w-96 bg-[#0e0e0e] text-[#ECE7DE] border-l border-[#1c1c1c] flex flex-col justify-between select-none shrink-0 h-full relative">
+    <aside
+      style={{ width: width ? `${width}px` : undefined }}
+      className="w-96 bg-[#0e0e0e] text-[#ECE7DE] border-l border-[#1c1c1c] flex flex-col justify-between select-none shrink-0 h-full relative"
+    >
       {/* Header */}
       <div className="p-4 border-b border-[#1c1c1c] bg-[#121212] flex items-center justify-between">
         <div className="flex items-center gap-2">

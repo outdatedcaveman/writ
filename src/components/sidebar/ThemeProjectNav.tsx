@@ -47,6 +47,7 @@ interface ThemeProjectNavProps {
   onOpenProjectSettings?: () => void;
   onOpenThemeManager?: () => void;
   onOpenVisualSettings?: () => void;
+  width?: number;
 }
 
 export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
@@ -68,7 +69,8 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
   onNewSegment,
   onOpenProjectSettings,
   onOpenThemeManager,
-  onOpenVisualSettings
+  onOpenVisualSettings,
+  width
 }) => {
   const currentProject = projects.find(p => p.id === activeProjectId) || projects[0];
   const activeSegments = segments.filter(s => !s.isArchived).sort((a, b) => a.order - b.order);
@@ -76,7 +78,10 @@ export const ThemeProjectNav: React.FC<ThemeProjectNavProps> = ({
   const [copiedBrowserUrl, setCopiedBrowserUrl] = useState(false);
 
   return (
-    <aside className="w-64 bg-[#0A0A0C] text-[#ECE7DE] border-r border-[#18181A] flex flex-col justify-between select-none shrink-0 h-full">
+    <aside
+      style={{ width: width ? `${width}px` : undefined }}
+      className="w-64 bg-[#0A0A0C] text-[#ECE7DE] border-r border-[#18181A] flex flex-col justify-between select-none shrink-0 h-full"
+    >
       {/* Top Header & Navigation Items */}
       <div className="flex flex-col overflow-y-auto flex-1">
         {/* Brand Bar */}

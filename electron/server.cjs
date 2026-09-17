@@ -30,8 +30,12 @@ const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
 const TRASH_DIR = path.join(DATA_DIR, 'trash');
 const DIST_DIR = path.join(__dirname, '..', 'dist');
 
+const VAULT_INBOX_DIR = path.join(DATA_DIR, 'vault_inbox');
+const VAULT_PROCESSED_DIR = path.join(VAULT_INBOX_DIR, '.processed');
+const VAULT_ITEMS_FILE = path.join(DATA_DIR, 'vault_inbox_items.json');
+
 // Ensure physical disk storage directories exist
-[DATA_DIR, PROJECTS_DIR, TRASH_DIR].forEach(dir => {
+[DATA_DIR, PROJECTS_DIR, TRASH_DIR, VAULT_INBOX_DIR, VAULT_PROCESSED_DIR].forEach(dir => {
   try {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -40,6 +44,77 @@ const DIST_DIR = path.join(__dirname, '..', 'dist');
     console.error(`Warning: Could not create directory ${dir}:`, err.message);
   }
 });
+
+// Vault Folder Watcher Engine
+function processVaultInboxFile(filename) {
+  if (filename.startsWith('.') || filename === '.processed') return;
+  const filePath = path.join(VAULT_INBOX_DIR, filename);
+  if (!fs.existsSync(filePath)) return;
+
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.isDirectory()) return;
+
+    const ext = path.extname(filename).toLowerCase();
+    let content = '';
+    let type = 'text';
+
+    if (['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg'].includes(ext)) {
+      type = 'image';
+      content = `Image dropped from folder: ${filename} (${(stat.size / 1024).toFixed(1)} KB)`;
+    } else if (['.mp4', '.mov', '.webm', '.mkv'].includes(ext)) {
+      type = 'video';
+      content = `Video dropped from folder: ${filename} (${(stat.size / 1024 / 1024).toFixed(1)} MB)`;
+    } else {
+      content = fs.readFileSync(filePath, 'utf-8');
+      type = 'text';
+    }
+
+    const title = path.basename(filename, ext).replace(/[_-]+/g, ' ');
+    const newItem = {
+      id: `vault-inbox-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: title || 'Dropped Asset',
+      type,
+      content,
+      source: 'drop_folder_watcher',
+      status: 'inbox',
+      droppedAt: Date.now(),
+      extractedInsights: {
+        coreAssertion: content.slice(0, 160).replace(/\n/g, ' ') || 'Unprocessed dropped asset',
+        thematicTags: ['AutoIngest', 'FolderWatcher'],
+        suggestedPlacement: {
+          targetType: 'segment',
+          targetTitle: 'Opening Inquest',
+          reasoning: 'Auto-ingested by Drop Folder Watcher. Review in Project Vault.'
+        }
+      }
+    };
+
+    let items = [];
+    if (fs.existsSync(VAULT_ITEMS_FILE)) {
+      try { items = JSON.parse(fs.readFileSync(VAULT_ITEMS_FILE, 'utf-8')); } catch {}
+    }
+    items.unshift(newItem);
+    fs.writeFileSync(VAULT_ITEMS_FILE, JSON.stringify(items, null, 2), 'utf-8');
+
+    // Move file to .processed folder
+    const targetProcessed = path.join(VAULT_PROCESSED_DIR, `${Date.now()}_${filename}`);
+    fs.renameSync(filePath, targetProcessed);
+    console.log(`[Vault Watcher] Auto-ingested dropped asset: ${filename} -> ID: ${newItem.id}`);
+  } catch (err) {
+    console.error(`[Vault Watcher] Error processing ${filename}:`, err.message);
+  }
+}
+
+// Check inbox periodically
+setInterval(() => {
+  try {
+    if (fs.existsSync(VAULT_INBOX_DIR)) {
+      const files = fs.readdirSync(VAULT_INBOX_DIR);
+      files.forEach(f => processVaultInboxFile(f));
+    }
+  } catch {}
+}, 2500);
 
 // MIME types for static asset serving
 const MIME_TYPES = {
@@ -219,6 +294,99 @@ function handleApiRequest(req, res, pathname, parsedUrl) {
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'archived_to_safety_trash', id: trashItem.id }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // Vault Drop Folder Watcher endpoints
+  if (pathname === '/api/vault/inbox-info' && req.method === 'GET') {
+    let itemsCount = 0;
+    if (fs.existsSync(VAULT_ITEMS_FILE)) {
+      try { itemsCount = JSON.parse(fs.readFileSync(VAULT_ITEMS_FILE, 'utf-8')).length; } catch {}
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      inboxDir: VAULT_INBOX_DIR,
+      isWatching: true,
+      pendingCount: itemsCount
+    }));
+    return;
+  }
+
+  if (pathname === '/api/vault/open-inbox' && req.method === 'POST') {
+    try {
+      const { exec } = require('child_process');
+      if (process.platform === 'win32') {
+        exec(`explorer.exe "${VAULT_INBOX_DIR}"`);
+      } else if (process.platform === 'darwin') {
+        exec(`open "${VAULT_INBOX_DIR}"`);
+      } else {
+        exec(`xdg-open "${VAULT_INBOX_DIR}"`);
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'opened', path: VAULT_INBOX_DIR }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  if (pathname === '/api/vault/items' && req.method === 'GET') {
+    try {
+      let items = [];
+      if (fs.existsSync(VAULT_ITEMS_FILE)) {
+        items = JSON.parse(fs.readFileSync(VAULT_ITEMS_FILE, 'utf-8'));
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(items));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // External Inbound Webhook for Shortcuts, Notion, Zapier, Email forwarders
+  if (pathname === '/api/vault/inbound' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const newItem = {
+          id: `vault-hook-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          title: payload.title || `Webhook Ingest ${new Date().toLocaleTimeString()}`,
+          type: payload.type || 'text',
+          content: payload.content || '',
+          mediaUrl: payload.mediaUrl,
+          source: payload.source || 'external_webhook',
+          status: 'inbox',
+          droppedAt: Date.now(),
+          extractedInsights: {
+            coreAssertion: (payload.content || '').slice(0, 160).replace(/\n/g, ' ') || 'External webhook drop',
+            thematicTags: ['WebhookSync', 'ExternalIntegration'],
+            suggestedPlacement: {
+              targetType: 'segment',
+              targetTitle: 'Opening Inquest',
+              reasoning: 'Ingested via external webhook. Review in Project Vault.'
+            }
+          }
+        };
+
+        let items = [];
+        if (fs.existsSync(VAULT_ITEMS_FILE)) {
+          try { items = JSON.parse(fs.readFileSync(VAULT_ITEMS_FILE, 'utf-8')); } catch {}
+        }
+        items.unshift(newItem);
+        fs.writeFileSync(VAULT_ITEMS_FILE, JSON.stringify(items, null, 2), 'utf-8');
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ingested', item: newItem }));
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message }));

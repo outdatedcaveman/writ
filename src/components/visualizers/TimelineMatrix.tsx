@@ -18,7 +18,10 @@ import {
   TrendingUp,
   Bookmark,
   Eye,
-  Info
+  Info,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw
 } from "lucide-react";
 
 interface TimelineMatrixProps {
@@ -55,9 +58,137 @@ export const TimelineMatrix: React.FC<TimelineMatrixProps> = ({
     [threads]
   );
 
-  // Inspector is CLOSED by default so the author sees the panoramic timeline first!
+  // Panoramic Arc View Mode default
   const [inspectedSegmentId, setInspectedSegmentId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"timeline" | "matrix" | "combined">("timeline");
+  const [viewMode, setViewMode] = useState<"panoramic" | "timeline" | "matrix" | "combined">("panoramic");
+
+  // Panoramic Canvas Zoom & Pan State
+  const [arcZoom, setArcZoom] = useState(1);
+  const [arcPan, setArcPan] = useState({ x: 0, y: 0 });
+  const [isArcPanning, setIsArcPanning] = useState(false);
+  const [arcPanStart, setArcPanStart] = useState({ x: 0, y: 0 });
+  const [hoveredArcThreadId, setHoveredArcThreadId] = useState<string | null>(null);
+
+  const handlePointerDownArc = (e: React.PointerEvent) => {
+    setIsArcPanning(true);
+    setArcPanStart({ x: e.clientX - arcPan.x, y: e.clientY - arcPan.y });
+  };
+
+  const handlePointerMoveArc = (e: React.PointerEvent) => {
+    if (isArcPanning) {
+      setArcPan({ x: e.clientX - arcPanStart.x, y: e.clientY - arcPanStart.y });
+    }
+  };
+
+  const handlePointerUpArc = () => {
+    setIsArcPanning(false);
+  };
+
+  const handleWheelArc = (e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.1 : -0.1;
+      setArcZoom(z => Math.max(0.4, Math.min(2.5, +(z + delta).toFixed(2))));
+    }
+  };
+
+  // Panoramic Arc calculations
+  const panoramicData = useMemo(() => {
+    if (activeSegments.length === 0) return { width: 900, chapterX: {}, arcs: [], baselineY: 230 };
+    const spacing = 150;
+    const padding = 90;
+    const width = Math.max(920, padding * 2 + (activeSegments.length - 1) * spacing);
+    const baselineY = 230;
+
+    const chapterX: Record<string, number> = {};
+    activeSegments.forEach((seg, idx) => {
+      chapterX[seg.id] = padding + idx * spacing;
+    });
+
+    const arcs: {
+      id: string;
+      threadId: string;
+      name: string;
+      category: string;
+      fromSegId: string;
+      toSegId: string;
+      x1: number;
+      x2: number;
+      height: number;
+      color: string;
+    }[] = [];
+
+    const getColor = (cat: string) => {
+      switch (cat) {
+        case "main_plot": return "#C8A051";
+        case "character_arc": return "#6B8FA3";
+        case "argument": return "#BF614B";
+        case "subplot": return "#7E9F86";
+        default: return "#A09A8F";
+      }
+    };
+
+    activeThreads.forEach(th => {
+      const treatingSegs = activeSegments.filter(s => s.treatedThreadIds?.includes(th.id));
+      if (treatingSegs.length < 2) return;
+
+      for (let i = 0; i < treatingSegs.length - 1; i++) {
+        const s1 = treatingSegs[i];
+        const s2 = treatingSegs[i + 1];
+        const x1 = chapterX[s1.id];
+        const x2 = chapterX[s2.id];
+        if (x1 !== undefined && x2 !== undefined) {
+          const dist = Math.abs(x2 - x1);
+          const height = Math.min(180, 40 + dist * 0.36);
+          arcs.push({
+            id: `${th.id}-${s1.id}-${s2.id}`,
+            threadId: th.id,
+            name: th.name,
+            category: th.category,
+            fromSegId: s1.id,
+            toSegId: s2.id,
+            x1,
+            x2,
+            height,
+            color: getColor(th.category)
+          });
+        }
+      }
+    });
+
+    // Character connections
+    characters.forEach(char => {
+      const charSegs = activeSegments.filter(
+        s => s.characterIds?.includes(char.id) || (s.textContent && s.textContent.toLowerCase().includes(char.name.toLowerCase()))
+      );
+      if (charSegs.length < 2) return;
+
+      for (let i = 0; i < charSegs.length - 1; i++) {
+        const s1 = charSegs[i];
+        const s2 = charSegs[i + 1];
+        const x1 = chapterX[s1.id];
+        const x2 = chapterX[s2.id];
+        if (x1 !== undefined && x2 !== undefined) {
+          const dist = Math.abs(x2 - x1);
+          const height = Math.min(190, 48 + dist * 0.38);
+          arcs.push({
+            id: `char-${char.id}-${s1.id}-${s2.id}`,
+            threadId: `char-${char.id}`,
+            name: `${char.name} (Arc)`,
+            category: "character_arc",
+            fromSegId: s1.id,
+            toSegId: s2.id,
+            x1,
+            x2,
+            height,
+            color: "#6B8FA3"
+          });
+        }
+      }
+    });
+
+    return { width, chapterX, arcs, baselineY };
+  }, [activeSegments, activeThreads, characters]);
 
   // Selected segment for inspection (if opened)
   const selectedSeg = useMemo(
@@ -232,6 +363,16 @@ export const TimelineMatrix: React.FC<TimelineMatrixProps> = ({
           {/* Mode Tabs */}
           <div className="flex items-center bg-[#151518] p-0.5 rounded-lg border border-[#242428]">
             <button
+              onClick={() => setViewMode("panoramic")}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                viewMode === "panoramic"
+                  ? "bg-[#25252b] text-[#ECE7DE] shadow-sm"
+                  : "text-[#8E8E93] hover:text-[#ECE7DE]"
+              }`}
+            >
+              Panoramic Arcs
+            </button>
+            <button
               onClick={() => setViewMode("timeline")}
               className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                 viewMode === "timeline"
@@ -286,6 +427,245 @@ export const TimelineMatrix: React.FC<TimelineMatrixProps> = ({
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden relative">
         <div className="p-6 space-y-6 max-w-full">
+          {/* ========================================================================= */}
+          {/* TRACK 0: PANORAMIC ARC DIAGRAM (CIRCULAR THREAD CONNECTIONS ACROSS WHOLE WORK) */}
+          {/* ========================================================================= */}
+          {(viewMode === "panoramic" || viewMode === "combined") && (
+            <div className="p-5 rounded-xl border border-[#202024] bg-[#0c0c0f] space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono uppercase tracking-wider text-[11px] text-[#C8A051] flex items-center gap-1.5 font-semibold">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Panoramic Circular Arc Matrix · Whole Project
+                  </span>
+                  <span className="text-[11px] text-[#66625B]">
+                    ({panoramicData.arcs.length} narrative arcs across {activeSegments.length} chapters)
+                  </span>
+                </div>
+
+                {/* Legend & Arc Zoom Controls */}
+                <div className="flex items-center gap-4">
+                  {/* Arc Categories Legend */}
+                  <div className="flex items-center gap-2.5 text-[10px] text-[#8E8E93] font-mono">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-[#C8A051]" /> Plot
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-[#6B8FA3]" /> Character
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-[#BF614B]" /> Argument
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-[#7E9F86]" /> Subplot
+                    </span>
+                  </div>
+
+                  {/* Zoom Toolbar */}
+                  <div className="flex items-center bg-[#141418] rounded-lg border border-[#24242e] px-1 py-0.5">
+                    <button
+                      onClick={() => setArcZoom(z => Math.min(2.5, +(z + 0.1).toFixed(2)))}
+                      className="p-1 hover:text-[#ECE7DE] text-[#66625B] transition-colors cursor-pointer"
+                      title="Zoom In"
+                    >
+                      <ZoomIn className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-[10px] font-mono px-1.5 text-[#8E8E93]">{Math.round(arcZoom * 100)}%</span>
+                    <button
+                      onClick={() => setArcZoom(z => Math.max(0.4, +(z - 0.1).toFixed(2)))}
+                      className="p-1 hover:text-[#ECE7DE] text-[#66625B] transition-colors cursor-pointer"
+                      title="Zoom Out"
+                    >
+                      <ZoomOut className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setArcZoom(1);
+                        setArcPan({ x: 0, y: 0 });
+                      }}
+                      className="p-1 hover:text-[#ECE7DE] text-[#66625B] transition-colors cursor-pointer"
+                      title="Reset View"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Panoramic SVG Canvas */}
+              <div
+                className="relative h-[320px] rounded-lg bg-[#070709] border border-[#1a1a20] overflow-hidden select-none cursor-grab active:cursor-grabbing"
+                onPointerDown={handlePointerDownArc}
+                onPointerMove={handlePointerMoveArc}
+                onPointerUp={handlePointerUpArc}
+                onWheel={handleWheelArc}
+              >
+                {/* Subtle Grid */}
+                <div
+                  className="absolute inset-0 opacity-10 pointer-events-none"
+                  style={{
+                    backgroundImage: "radial-gradient(#ECE7DE 1px, transparent 1px)",
+                    backgroundSize: "24px 24px",
+                    transform: `translate(${arcPan.x % 24}px, ${arcPan.y % 24}px)`
+                  }}
+                />
+
+                <svg
+                  className="w-full h-full"
+                  style={{
+                    transform: `translate(${arcPan.x}px, ${arcPan.y}px) scale(${arcZoom})`,
+                    transformOrigin: "0 0"
+                  }}
+                >
+                  {/* Baseline Axis */}
+                  <line
+                    x1="40"
+                    y1={panoramicData.baselineY}
+                    x2={panoramicData.width - 40}
+                    y2={panoramicData.baselineY}
+                    stroke="#24242e"
+                    strokeWidth="2"
+                  />
+
+                  {/* Arcs Connecting Chapters */}
+                  {panoramicData.arcs.map(arc => {
+                    const isHovered = hoveredArcThreadId === arc.threadId;
+                    const midX = (arc.x1 + arc.x2) / 2;
+                    const peakY = panoramicData.baselineY - arc.height;
+
+                    return (
+                      <g
+                        key={arc.id}
+                        onMouseEnter={() => setHoveredArcThreadId(arc.threadId)}
+                        onMouseLeave={() => setHoveredArcThreadId(null)}
+                        className="cursor-pointer transition-opacity"
+                        style={{
+                          opacity: hoveredArcThreadId && !isHovered ? 0.25 : 0.85
+                        }}
+                      >
+                        <path
+                          d={`M ${arc.x1} ${panoramicData.baselineY} Q ${midX} ${peakY} ${arc.x2} ${panoramicData.baselineY}`}
+                          fill="none"
+                          stroke={arc.color}
+                          strokeWidth={isHovered ? "3" : "1.8"}
+                          strokeDasharray={arc.category === "argument" ? "4 4" : undefined}
+                        />
+                        {/* Interactive Tooltip on hover */}
+                        {isHovered && (
+                          <g transform={`translate(${midX}, ${peakY - 14})`}>
+                            <rect
+                              x="-60"
+                              y="-10"
+                              width="120"
+                              height="20"
+                              rx="4"
+                              fill="#101014"
+                              stroke={arc.color}
+                              strokeWidth="1"
+                            />
+                            <text
+                              textAnchor="middle"
+                              y="3"
+                              fill="#ECE7DE"
+                              fontSize="9"
+                              fontWeight="bold"
+                            >
+                              {arc.name.length > 18 ? `${arc.name.slice(0, 17)}…` : arc.name}
+                            </text>
+                          </g>
+                        )}
+                      </g>
+                    );
+                  })}
+
+                  {/* Chapter Nodes on the Baseline */}
+                  {activeSegments.map(seg => {
+                    const x = panoramicData.chapterX[seg.id] || 100;
+                    const y = panoramicData.baselineY;
+                    const isInspected = inspectedSegmentId === seg.id;
+                    const status = getStatusBadge(seg.status);
+                    const wordCount = (seg.textContent.match(/\b\w+\b/g) || []).length;
+
+                    return (
+                      <g
+                        key={seg.id}
+                        transform={`translate(${x}, ${y})`}
+                        onClick={e => {
+                          e.stopPropagation();
+                          setInspectedSegmentId(seg.id);
+                        }}
+                        className="cursor-pointer group"
+                      >
+                        {/* Glow on inspect */}
+                        {isInspected && (
+                          <circle
+                            r="22"
+                            fill="none"
+                            stroke="#6B8FA3"
+                            strokeWidth="2"
+                            strokeDasharray="3 3"
+                          />
+                        )}
+
+                        {/* Node Circle */}
+                        <circle
+                          r="16"
+                          fill={isInspected ? "#6B8FA3" : "#141418"}
+                          stroke={isInspected ? "#ECE7DE" : "#2e2e38"}
+                          strokeWidth={isInspected ? "2" : "1.5"}
+                        />
+
+                        {/* Roman numeral */}
+                        <text
+                          textAnchor="middle"
+                          y="4"
+                          fill={isInspected ? "#0A0A0C" : "#ECE7DE"}
+                          fontSize="10"
+                          fontWeight="bold"
+                          fontFamily="serif"
+                        >
+                          {seg.romanNumeral}
+                        </text>
+
+                        {/* Status Bead */}
+                        <circle
+                          cx="11"
+                          cy="-11"
+                          r="3"
+                          fill={status.dot.includes("7E9F86") ? "#7E9F86" : status.dot.includes("C8A051") ? "#C8A051" : "#555555"}
+                        />
+
+                        {/* Chapter Title & Word Count below */}
+                        <text
+                          textAnchor="middle"
+                          y="26"
+                          fill="#ECE7DE"
+                          fontSize="10"
+                          fontWeight="500"
+                        >
+                          {seg.title.length > 14 ? `${seg.title.slice(0, 13)}…` : seg.title}
+                        </text>
+                        <text
+                          textAnchor="middle"
+                          y="38"
+                          fill="#66625B"
+                          fontSize="8"
+                          fontFamily="monospace"
+                        >
+                          {wordCount}w
+                        </text>
+                      </g>
+                    );
+                  })}
+                </svg>
+
+                {/* Canvas hint */}
+                <div className="absolute bottom-2 left-3 px-2 py-0.5 rounded bg-[#101014]/90 border border-[#202026] text-[10px] text-[#66625B] pointer-events-none">
+                  Hover arcs to highlight threads · Drag canvas to pan · Ctrl+Wheel to zoom · Click beads to inspect
+                </div>
+              </div>
+            </div>
+          )}
           {/* ========================================================================= */}
           {/* TRACK 1: MACRO ACTS / PHASES RIBBON                                      */}
           {/* ========================================================================= */}
