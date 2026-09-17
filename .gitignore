@@ -5,3 +5,4 @@ data/
 .DS_Store
 *.log
 main_debug.txt
+public-repo/

@@ -26,6 +26,14 @@ import { SegmentMetadataModal } from "./components/modals/SegmentMetadataModal";
 import { ThemeManagerModal } from "./components/modals/ThemeManagerModal";
 import { NewProjectModal } from "./components/modals/NewProjectModal";
 import {
+  MasterCraftSentinel,
+  MasterCraftReport,
+  MasterCraftDiagnosis,
+  SentinelSettings,
+  defaultSentinelSettings
+} from "./engine/analysis/masterCraftSentinel";
+import { MasterCraftSentinelModal } from "./components/modals/MasterCraftSentinelModal";
+import {
   Sparkles,
   Wifi,
   WifiOff,
@@ -41,7 +49,10 @@ import {
   BookOpen,
   FolderTree,
   Compass,
-  Inbox
+  Inbox,
+  ShieldAlert,
+  Bell,
+  X
 } from "lucide-react";
 
 const store = new WorkspaceStore();
@@ -135,6 +146,20 @@ export default function App() {
   const [isThemeManagerOpen, setIsThemeManagerOpen] = useState(false);
   const [isZenMode, setIsZenMode] = useState(false);
 
+  // Master Craft Sentinel & Proactive Interval Nudge State
+  const [isSentinelModalOpen, setIsSentinelModalOpen] = useState(false);
+  const [sentinelSettings, setSentinelSettings] = useState<SentinelSettings>(() => {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        const saved = window.localStorage.getItem("writ:sentinel:settings:v1");
+        if (saved) return JSON.parse(saved);
+      }
+    } catch {}
+    return defaultSentinelSettings;
+  });
+  const [activeNudgeToast, setActiveNudgeToast] = useState<MasterCraftDiagnosis | null>(null);
+  const [lastNudgeTimestamp, setLastNudgeTimestamp] = useState<number>(Date.now());
+
   const handleUpdateVisualSettings = (updater: (prev: VisualSettings) => VisualSettings) => {
     setVisualSettings(prev => {
       const next = updater(prev);
@@ -166,6 +191,47 @@ export default function App() {
   const activeWiki = useMemo(() => {
     return workspace.wikis[activeProject?.id];
   }, [workspace.wikis, activeProject?.id]);
+
+  const activeSegments = useMemo(() => {
+    if (!activeProject) return [];
+    const draft = workspace.drafts[activeProject.activeDraftId];
+    if (!draft) return [];
+    return draft.segmentIds
+      .map(id => workspace.segments[id])
+      .filter(s => s && !s.isArchived)
+      .sort((a, b) => a.order - b.order);
+  }, [workspace.segments, workspace.drafts, activeProject]);
+
+  const sentinelReport: MasterCraftReport = useMemo(() => {
+    if (!activeProject) {
+      return MasterCraftSentinel.emptyReport();
+    }
+    return MasterCraftSentinel.analyzeProject({
+      segments: activeSegments,
+      wiki: activeWiki,
+      threads: workspace.threads,
+      plotPoints: activeWiki?.plotPoints
+    });
+  }, [activeProject, activeSegments, activeWiki, workspace.threads]);
+
+  // Proactive interval alarm effect for Sentinel nudges
+  useEffect(() => {
+    if (!sentinelSettings.enabled || sentinelSettings.intervalMinutes <= 0) return;
+
+    const intervalMs = sentinelSettings.intervalMinutes * 60 * 1000;
+    const intervalTimer = setInterval(() => {
+      const now = Date.now();
+      if (now - lastNudgeTimestamp >= intervalMs) {
+        setLastNudgeTimestamp(now);
+        if (sentinelReport.diagnoses.length > 0) {
+          const top = sentinelReport.diagnoses.find(d => d.severity === "critical") || sentinelReport.diagnoses[0];
+          setActiveNudgeToast(top);
+        }
+      }
+    }, 20000);
+
+    return () => clearInterval(intervalTimer);
+  }, [sentinelSettings.enabled, sentinelSettings.intervalMinutes, lastNudgeTimestamp, sentinelReport.diagnoses]);
 
   const activeSegment = useMemo(() => {
     if (workspace.activeSegmentId && workspace.segments[workspace.activeSegmentId]) {
@@ -827,6 +893,26 @@ export default function App() {
 
           {/* Right Controls & Utilities */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Master Craft Sentinel Button (Four Masters HUD) */}
+            <button
+              onClick={() => setIsSentinelModalOpen(true)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors cursor-pointer ${
+                sentinelReport.criticalDeficitsCount > 0
+                  ? "bg-[#C8A051]/10 border-[#C8A051]/50 text-[#C8A051] hover:bg-[#C8A051]/20"
+                  : "bg-[#141416] border-[#222226] text-[#7E9F86] hover:text-[#A7D8B1] hover:bg-[#1A1A1E]"
+              }`}
+              title={`Master Craft Sentinel: ${sentinelReport.criticalDeficitsCount} critical deficits (McPhee, Nabokov, Gilligan, Nolan)`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span className="hidden md:inline font-medium">Craft Sentinel:</span>
+              <span className="font-semibold">{sentinelReport.criticalDeficitsCount} Critical</span>
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  sentinelReport.criticalDeficitsCount > 0 ? "bg-[#C8A051] animate-pulse" : "bg-[#7E9F86]"
+                }`}
+              />
+            </button>
+
             {/* Visual Studio Controls Button */}
             <button
               onClick={() => setIsVisualSettingsOpen(true)}
@@ -1169,6 +1255,82 @@ export default function App() {
         onClose={() => setIsNewProjectModalOpen(false)}
         onCreateProject={handleCreateProjectFromModal}
       />
+
+      {/* MODAL: Master Craft Sentinel (McPhee, Nabokov, Gilligan, Nolan & Proactive Interval Nudges) */}
+      <MasterCraftSentinelModal
+        isOpen={isSentinelModalOpen}
+        onClose={() => setIsSentinelModalOpen(false)}
+        report={sentinelReport}
+        settings={sentinelSettings}
+        onUpdateSettings={(newSettings: SentinelSettings) => {
+          setSentinelSettings(newSettings);
+          try {
+            window.localStorage.setItem("writ:sentinel:settings:v1", JSON.stringify(newSettings));
+          } catch {}
+        }}
+        onFocusSection={(segmentId: string) => {
+          handleSelectSegment(segmentId);
+          setActiveView("editor");
+        }}
+        onTriggerTestNudge={() => {
+          if (sentinelReport.diagnoses.length > 0) {
+            setActiveNudgeToast(sentinelReport.diagnoses[0]);
+          }
+        }}
+      />
+
+      {/* FLOATING GENTLE NUDGE TOAST (Proactive craft interval alarm) */}
+      {activeNudgeToast && (
+        <div className="fixed bottom-6 right-6 max-w-md p-4 rounded-xl bg-[#141416] border border-[#C8A051]/60 shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-3 duration-300">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-[#C8A051]/20 flex items-center justify-center text-[#C8A051]">
+                <ShieldAlert className="w-3.5 h-3.5" />
+              </div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#C8A051]">
+                {activeNudgeToast.schoolLabel}
+              </span>
+            </div>
+            <button
+              onClick={() => setActiveNudgeToast(null)}
+              className="text-[#71717A] hover:text-[#ECE7DE] cursor-pointer"
+              title="Dismiss nudge"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="mt-2 text-xs text-[#ECE7DE] font-semibold">
+            Section {activeNudgeToast.segmentRoman}: {activeNudgeToast.segmentTitle}
+          </div>
+          <div className="mt-1 text-[11px] text-[#A09A8F] leading-relaxed">
+            {activeNudgeToast.headline}
+          </div>
+          <div className="mt-1 text-[10px] text-[#71717A] italic">
+            {activeNudgeToast.recommendation}
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              onClick={() => {
+                handleSelectSegment(activeNudgeToast.segmentId);
+                setActiveView("editor");
+                setActiveNudgeToast(null);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-[#C8A051] text-[#080808] text-xs font-semibold hover:bg-[#d9b161] cursor-pointer transition-colors"
+            >
+              Focus Section
+            </button>
+            <button
+              onClick={() => {
+                setIsSentinelModalOpen(true);
+                setActiveNudgeToast(null);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-[#1E1E22] text-[#ECE7DE] text-xs border border-[#2C2C32] hover:bg-[#28282C] cursor-pointer transition-colors"
+            >
+              Diagnostics
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

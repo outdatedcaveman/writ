@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Project, Segment, ProjectWiki } from "../../types/workspace";
 import { platformHub, PublishPackage, SupportedPlatform } from "../../engine/integrations/platformHub";
 import { assetService, StockAssetItem, GeneratedAssetStoryboard } from "../../engine/assets/assetService";
@@ -20,7 +20,12 @@ import {
   ArrowRight,
   ExternalLink,
   Wand2,
-  FileText
+  FileText,
+  Layers,
+  Check,
+  AlertCircle,
+  FileCheck,
+  ShieldCheck
 } from "lucide-react";
 
 interface PublishStudioViewProps {
@@ -39,7 +44,7 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
   onDropAssetToVault
 }) => {
   const [activeTab, setActiveTab] = useState<"publish" | "assets" | "inbound">("publish");
-  const [selectedPlatform, setSelectedPlatform] = useState<SupportedPlatform>("substack");
+  const [selectedPlatform, setSelectedPlatform] = useState<SupportedPlatform>("obsidian");
   const [naturalPrompt, setNaturalPrompt] = useState("");
   const [copied, setCopied] = useState(false);
   const [publishedNotice, setPublishedNotice] = useState<string | null>(null);
@@ -55,10 +60,22 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
   const [inboundUrlOrText, setInboundUrlOrText] = useState("");
   const [inboundNotice, setInboundNotice] = useState<string | null>(null);
 
-  const targetSegment = activeSegment || segments[0];
+  const targetSegment = activeSegment || segments[0] || {
+    id: "default-seg",
+    draftId: "default-draft",
+    title: "Draft Inquest",
+    romanNumeral: "I",
+    order: 1,
+    synopsis: "Opening section draft",
+    goals: [],
+    treatedThreadIds: [],
+    characterIds: [],
+    textContent: "Draft manuscript content...",
+    status: "active" as const
+  };
 
   // Derive Current Publish Package
-  const currentPackage: PublishPackage = React.useMemo(() => {
+  const currentPackage: PublishPackage = useMemo(() => {
     if (naturalPrompt.trim()) {
       return platformHub.synthesizeCustomPublishFormat(
         naturalPrompt,
@@ -69,22 +86,31 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
       );
     }
     switch (selectedPlatform) {
+      case "obsidian":
+        return platformHub.formatForObsidianVault(project, wiki, segments);
+      case "google_docs":
+        return platformHub.formatForGoogleDocs(project, segments);
       case "substack":
-        return platformHub.formatForSubstack(project, targetSegment);
+        return platformHub.formatForSubstack(project, targetSegment, segments);
       case "wattpad":
         return platformHub.formatForWattpad(project, targetSegment);
+      case "notion":
+        return platformHub.formatForNotion(project, wiki, segments);
       case "youtube":
         return platformHub.formatForYouTube(project, segments);
       case "spotify":
         return platformHub.formatForSpotify(project, targetSegment);
-      case "notion":
-        return platformHub.formatForNotion(project, wiki, segments);
       case "latex":
         return platformHub.formatForLatex(project, segments);
       default:
-        return platformHub.formatForSubstack(project, targetSegment);
+        return platformHub.formatForObsidianVault(project, wiki, segments);
     }
   }, [selectedPlatform, naturalPrompt, project, targetSegment, segments, wiki]);
+
+  // Live Craft & Integration Verification Checklist
+  const validation = useMemo(() => {
+    return platformHub.validatePlatformPackage(currentPackage);
+  }, [currentPackage]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(currentPackage.formattedBody);
@@ -92,9 +118,51 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleCopyGoogleDocsHtml = async () => {
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        const htmlBlob = new Blob([currentPackage.formattedBody], { type: "text/html" });
+        const textBlob = new Blob([targetSegment.textContent], { type: "text/plain" });
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": htmlBlob,
+            "text/plain": textBlob
+          })
+        ]);
+        setCopied(true);
+        setPublishedNotice("Copied formatted rich HTML! Paste directly into Google Docs (Ctrl+V) with full typography preserved.");
+        setTimeout(() => { setCopied(false); setPublishedNotice(null); }, 4500);
+        return;
+      }
+    } catch (e) {
+      console.warn("ClipboardItem write failed, fallback to plain text", e);
+    }
+    navigator.clipboard.writeText(currentPackage.formattedBody);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownloadCanvas = () => {
+    if (!currentPackage.metadata.canvasJson) return;
+    const blob = new Blob([currentPackage.metadata.canvasJson], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${project.slug}_Project.canvas`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setPublishedNotice(`Downloaded Obsidian Visual Canvas: ${project.slug}_Project.canvas`);
+    setTimeout(() => setPublishedNotice(null), 4000);
+  };
+
   const handleDownload = () => {
-    const ext = selectedPlatform === "latex" ? "tex" : selectedPlatform === "notion" ? "json" : "md";
-    const blob = new Blob([currentPackage.formattedBody], { type: "text/plain;charset=utf-8" });
+    let ext = "md";
+    let mime = "text/markdown";
+    if (selectedPlatform === "latex") { ext = "tex"; mime = "text/x-tex"; }
+    else if (selectedPlatform === "google_docs") { ext = "html"; mime = "text/html"; }
+    else if (selectedPlatform === "notion") { ext = "md"; mime = "text/markdown"; }
+
+    const blob = new Blob([currentPackage.formattedBody], { type: `${mime};charset=utf-8` });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -287,9 +355,78 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
             {/* Two Distinct Sections: Platform Integrations vs Document Formats */}
             <div className="space-y-3">
               <div className="text-[10px] uppercase font-bold tracking-wider text-[#71717A] px-1">
-                Direct Platform Integrations (Connected Workspaces)
+                Direct Platform Integrations (Connected Workspaces & Publishers)
               </div>
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                {/* Obsidian */}
+                <button
+                  onClick={() => {
+                    setSelectedPlatform("obsidian");
+                    setNaturalPrompt("");
+                  }}
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                    selectedPlatform === "obsidian" && !naturalPrompt
+                      ? "bg-[#1c1c1c] border-[#9E7AFF] text-[#9E7AFF] shadow-md"
+                      : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
+                  }`}
+                >
+                  <Layers className="w-4 h-4 text-[#9E7AFF]" />
+                  <span className="text-xs font-semibold">Obsidian</span>
+                  <span className="text-[9px] text-[#71717A]">Vault & Canvas</span>
+                </button>
+
+                {/* Google Docs */}
+                <button
+                  onClick={() => {
+                    setSelectedPlatform("google_docs");
+                    setNaturalPrompt("");
+                  }}
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                    selectedPlatform === "google_docs" && !naturalPrompt
+                      ? "bg-[#1c1c1c] border-[#4285F4] text-[#4285F4] shadow-md"
+                      : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
+                  }`}
+                >
+                  <FileText className="w-4 h-4 text-[#4285F4]" />
+                  <span className="text-xs font-semibold">Google Docs</span>
+                  <span className="text-[9px] text-[#71717A]">Rich HTML & API</span>
+                </button>
+
+                {/* Substack */}
+                <button
+                  onClick={() => {
+                    setSelectedPlatform("substack");
+                    setNaturalPrompt("");
+                  }}
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                    selectedPlatform === "substack" && !naturalPrompt
+                      ? "bg-[#1c1c1c] border-[#FF6719] text-[#FF6719] shadow-md"
+                      : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
+                  }`}
+                >
+                  <BookMarked className="w-4 h-4 text-[#FF6719]" />
+                  <span className="text-xs font-semibold">Substack</span>
+                  <span className="text-[9px] text-[#71717A]">Newsletter Draft</span>
+                </button>
+
+                {/* Wattpad */}
+                <button
+                  onClick={() => {
+                    setSelectedPlatform("wattpad");
+                    setNaturalPrompt("");
+                  }}
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                    selectedPlatform === "wattpad" && !naturalPrompt
+                      ? "bg-[#1c1c1c] border-[#FF500A] text-[#FF500A] shadow-md"
+                      : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
+                  }`}
+                >
+                  <BookMarked className="w-4 h-4 text-[#FF500A]" />
+                  <span className="text-xs font-semibold">Wattpad</span>
+                  <span className="text-[9px] text-[#71717A]">Serial Chapter</span>
+                </button>
+
+                {/* Notion */}
                 <button
                   onClick={() => {
                     setSelectedPlatform("notion");
@@ -302,42 +439,11 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
                   }`}
                 >
                   <Globe className="w-4 h-4 text-[#ECE7DE]" />
-                  <span className="text-xs font-semibold">Notion (API)</span>
-                  <span className="text-[9px] text-[#71717A]">Direct Page Publish</span>
+                  <span className="text-xs font-semibold">Notion</span>
+                  <span className="text-[9px] text-[#71717A]">Direct REST API</span>
                 </button>
 
-                <button
-                  onClick={() => {
-                    setSelectedPlatform("substack");
-                    setNaturalPrompt("");
-                  }}
-                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
-                    selectedPlatform === "substack" && !naturalPrompt
-                      ? "bg-[#1c1c1c] border-[#7E9F86] text-[#7E9F86] shadow-md"
-                      : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
-                  }`}
-                >
-                  <BookMarked className="w-4 h-4 text-[#7E9F86]" />
-                  <span className="text-xs font-semibold">Substack</span>
-                  <span className="text-[9px] text-[#71717A]">Newsletter Draft</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setSelectedPlatform("wattpad");
-                    setNaturalPrompt("");
-                  }}
-                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
-                    selectedPlatform === "wattpad" && !naturalPrompt
-                      ? "bg-[#1c1c1c] border-[#BF614B] text-[#BF614B] shadow-md"
-                      : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
-                  }`}
-                >
-                  <FileText className="w-4 h-4 text-[#BF614B]" />
-                  <span className="text-xs font-semibold">Wattpad</span>
-                  <span className="text-[9px] text-[#71717A]">Serialized Chapter</span>
-                </button>
-
+                {/* YouTube */}
                 <button
                   onClick={() => {
                     setSelectedPlatform("youtube");
@@ -345,15 +451,16 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
                   }}
                   className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
                     selectedPlatform === "youtube" && !naturalPrompt
-                      ? "bg-[#1c1c1c] border-[#BF614B] text-[#BF614B] shadow-md"
+                      ? "bg-[#1c1c1c] border-[#FF0000] text-[#FF0000] shadow-md"
                       : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
                   }`}
                 >
-                  <Tv className="w-4 h-4 text-[#BF614B]" />
+                  <Tv className="w-4 h-4 text-[#FF0000]" />
                   <span className="text-xs font-semibold">YouTube</span>
-                  <span className="text-[9px] text-[#71717A]">Script & Timestamps</span>
+                  <span className="text-[9px] text-[#71717A]">Script & Cues</span>
                 </button>
 
+                {/* Spotify */}
                 <button
                   onClick={() => {
                     setSelectedPlatform("spotify");
@@ -361,13 +468,13 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
                   }}
                   className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
                     selectedPlatform === "spotify" && !naturalPrompt
-                      ? "bg-[#1c1c1c] border-[#7E9F86] text-[#7E9F86] shadow-md"
+                      ? "bg-[#1c1c1c] border-[#1DB954] text-[#1DB954] shadow-md"
                       : "bg-[#101010] border-[#202020] text-[#A09A8F] hover:border-[#333]"
                   }`}
                 >
-                  <Headphones className="w-4 h-4 text-[#7E9F86]" />
-                  <span className="text-xs font-semibold">Spotify / Audio</span>
-                  <span className="text-[9px] text-[#71717A]">Show Notes & Cues</span>
+                  <Headphones className="w-4 h-4 text-[#1DB954]" />
+                  <span className="text-xs font-semibold">Spotify</span>
+                  <span className="text-[9px] text-[#71717A]">Audio Notes</span>
                 </button>
               </div>
 
@@ -437,7 +544,186 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
               </div>
             </div>
 
-            {/* Notion Live API Card when Notion is active */}
+            {/* LIVE INTEGRATION CARDS FOR PLATFORMS */}
+
+            {/* 1. OBSIDIAN INTEGRATION CARD */}
+            {selectedPlatform === "obsidian" && (
+              <div className="p-5 rounded-2xl bg-[#141416] border border-[#9E7AFF]/40 space-y-4 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-[#9E7AFF]/20 flex items-center justify-center font-bold text-xs text-[#9E7AFF]">
+                      <Layers className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-semibold text-[#ECE7DE]">Obsidian Vault & Interactive Canvas Exporter</h4>
+                      <p className="text-[11px] text-[#71717A]">
+                        Generates Markdown with YAML frontmatter, bidirectional [[wikilinks]], and interactive <span className="font-mono text-[#9E7AFF]">.canvas</span> visual map
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#9E7AFF]/10 text-[#9E7AFF] border border-[#9E7AFF]/30">
+                    Vault + Canvas Ready
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                  <button
+                    onClick={handleCopy}
+                    className="px-3.5 py-2 rounded-lg bg-[#9E7AFF] hover:bg-[#b091ff] text-[#080808] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Vault Markdown ([[Wikilinks]])</span>
+                  </button>
+
+                  <button
+                    onClick={handleDownloadCanvas}
+                    className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#9E7AFF]/40 text-xs text-[#9E7AFF] flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download .canvas Visual Map</span>
+                  </button>
+
+                  <button
+                    onClick={handleDownload}
+                    className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5 text-[#A09A8F]" />
+                    <span>Download Note (.md)</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 2. GOOGLE DOCS INTEGRATION CARD */}
+            {selectedPlatform === "google_docs" && (
+              <div className="p-5 rounded-2xl bg-[#141416] border border-[#4285F4]/40 space-y-4 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-[#4285F4]/20 flex items-center justify-center font-bold text-xs text-[#4285F4]">
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-semibold text-[#ECE7DE]">Google Docs Typography Clipboard & API</h4>
+                      <p className="text-[11px] text-[#71717A]">
+                        Copies rich formatted HTML to system clipboard for clean Ctrl+V paste into Google Docs with preserved headings & indentations
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#4285F4]/10 text-[#4285F4] border border-[#4285F4]/30">
+                    Rich Paste Ready
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                  <button
+                    onClick={handleCopyGoogleDocsHtml}
+                    className="px-4 py-2 rounded-lg bg-[#4285F4] hover:bg-[#5a95f5] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy for Google Docs (Rich Formatted HTML)</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const jsonStr = JSON.stringify(currentPackage.metadata.googleDocsJson || {}, null, 2);
+                      const blob = new Blob([jsonStr], { type: "application/json" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `${project.slug}_GoogleDocs_batchUpdate.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5 text-[#4285F4]" />
+                    <span>Download Docs API JSON (batchUpdate)</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 3. SUBSTACK INTEGRATION CARD */}
+            {selectedPlatform === "substack" && (
+              <div className="p-5 rounded-2xl bg-[#141416] border border-[#FF6719]/40 space-y-4 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-[#FF6719]/20 flex items-center justify-center font-bold text-xs text-[#FF6719]">
+                      <BookMarked className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-semibold text-[#ECE7DE]">Substack Newsletter Dispatch</h4>
+                      <p className="text-[11px] text-[#71717A]">
+                        Includes headline, subtitle inquiry, byline, <span className="font-mono text-[#FF6719]">&lt;!-- paywall --&gt;</span> subscriber gate, and footer CTA
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#FF6719]/10 text-[#FF6719] border border-[#FF6719]/30">
+                    Newsletter Layout
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                  <button
+                    onClick={handleCopy}
+                    className="px-4 py-2 rounded-lg bg-[#FF6719] hover:bg-[#ff7b36] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Substack Newsletter Post</span>
+                  </button>
+
+                  <button
+                    onClick={handleDownload}
+                    className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5 text-[#FF6719]" />
+                    <span>Download Substack .md</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 4. WATTPAD INTEGRATION CARD */}
+            {selectedPlatform === "wattpad" && (
+              <div className="p-5 rounded-2xl bg-[#141416] border border-[#FF500A]/40 space-y-4 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-[#FF500A]/20 flex items-center justify-center font-bold text-xs text-[#FF500A]">
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-semibold text-[#ECE7DE]">Wattpad Serial Episode Exporter</h4>
+                      <p className="text-[11px] text-[#71717A]">
+                        Serialized Part numbering, teaser quote, cliffhanger pacing, vote & comment CTAs, and discoverability tag cloud
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#FF500A]/10 text-[#FF500A] border border-[#FF500A]/30">
+                    Serialized Format
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                  <button
+                    onClick={handleCopy}
+                    className="px-4 py-2 rounded-lg bg-[#FF500A] hover:bg-[#ff682b] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Wattpad Serial Chapter</span>
+                  </button>
+
+                  <button
+                    onClick={handleDownload}
+                    className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5 text-[#FF500A]" />
+                    <span>Download Wattpad .md</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 5. NOTION LIVE API CARD */}
             {selectedPlatform === "notion" && (
               <div className="p-5 rounded-2xl bg-[#141416] border border-[#27272A] space-y-4 shadow-lg">
                 <div className="flex items-center justify-between">
@@ -524,6 +810,44 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
                 </div>
               </div>
             )}
+
+            {/* LIVE CRAFT & INTEGRATION VERIFICATION STATUS CHECKLIST */}
+            <div className="p-4 rounded-xl border border-[#202020] bg-[#121214] space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className={`w-4 h-4 ${validation.valid ? "text-[#7E9F86]" : "text-[#C8A051]"}`} />
+                  <span className="text-xs font-semibold text-[#ECE7DE]">
+                    Integration & Craft Verification Checklist ({selectedPlatform.toUpperCase()})
+                  </span>
+                </div>
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${
+                  validation.valid
+                    ? "bg-[#7E9F86]/15 text-[#7E9F86] border border-[#7E9F86]/30"
+                    : "bg-[#C8A051]/15 text-[#C8A051] border border-[#C8A051]/30"
+                }`}>
+                  {validation.valid ? "100% Checked & Verified" : "Checks Incomplete"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                {validation.checks.map((chk, cIdx) => (
+                  <div
+                    key={cIdx}
+                    className="p-2.5 rounded-lg bg-[#0A0A0C] border border-[#1E1E22] flex items-start gap-2 text-xs"
+                  >
+                    {chk.passed ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-[#7E9F86] shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-3.5 h-3.5 text-[#C8A051] shrink-0 mt-0.5" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-[#ECE7DE] text-[11px] truncate">{chk.name}</div>
+                      <div className="text-[10px] text-[#71717A] mt-0.5 line-clamp-2">{chk.message}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             {/* Generated Package Preview & Actions */}
             <div className="p-5 rounded-xl border border-[#202020] bg-[#101010] space-y-4">
