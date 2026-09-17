@@ -157,8 +157,30 @@ export default function App() {
     } catch {}
     return defaultSentinelSettings;
   });
-  const [activeNudgeToast, setActiveNudgeToast] = useState<MasterCraftDiagnosis | null>(null);
+  const [activeNudgeToast, setActiveNudgeToast] = useState<(MasterCraftDiagnosis & { lapsedNotice?: string }) | null>(null);
   const [lastNudgeTimestamp, setLastNudgeTimestamp] = useState<number>(Date.now());
+
+  // Web Audio synthesizer for harmonic master craft alert chime
+  const playChimeTone = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const now = ctx.currentTime;
+      [528, 660].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, now + i * 0.12);
+        gain.gain.setValueAtTime(0.1, now + i * 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.12 + 0.8);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + i * 0.12);
+        osc.stop(now + i * 0.12 + 0.8);
+      });
+    } catch {}
+  };
 
   const handleUpdateVisualSettings = (updater: (prev: VisualSettings) => VisualSettings) => {
     setVisualSettings(prev => {
@@ -214,6 +236,30 @@ export default function App() {
     });
   }, [activeProject, activeSegments, activeWiki, workspace.threads]);
 
+  // Open-aware startup check: fires immediately if interval elapsed while program was closed
+  useEffect(() => {
+    if (!sentinelSettings.enabled || !sentinelSettings.openAwareAlerts || !activeProject) return;
+
+    const { isLapsed, elapsedFormatted } = MasterCraftSentinel.checkLapsedInterval(sentinelSettings);
+    if (isLapsed && sentinelReport.diagnoses.length > 0) {
+      const top = sentinelReport.diagnoses.find(d => d.severity === "critical") || sentinelReport.diagnoses[0];
+      setActiveNudgeToast({
+        ...top,
+        lapsedNotice: `While away (${elapsedFormatted} elapsed)`
+      });
+      if (sentinelSettings.soundChime) {
+        playChimeTone();
+      }
+      MasterCraftSentinel.dispatchRemotePush(sentinelSettings, top, activeProject.title);
+
+      setSentinelSettings(prev => {
+        const next = { ...prev, lastCheckTimestamp: Date.now() };
+        try { window.localStorage.setItem("writ:sentinel:settings:v1", JSON.stringify(next)); } catch {}
+        return next;
+      });
+    }
+  }, [activeProject?.id, sentinelSettings.enabled, sentinelSettings.openAwareAlerts, sentinelReport.diagnoses.length]);
+
   // Proactive interval alarm effect for Sentinel nudges
   useEffect(() => {
     if (!sentinelSettings.enabled || sentinelSettings.intervalMinutes <= 0) return;
@@ -223,15 +269,27 @@ export default function App() {
       const now = Date.now();
       if (now - lastNudgeTimestamp >= intervalMs) {
         setLastNudgeTimestamp(now);
+        setSentinelSettings(prev => {
+          const next = { ...prev, lastCheckTimestamp: now };
+          try { window.localStorage.setItem("writ:sentinel:settings:v1", JSON.stringify(next)); } catch {}
+          return next;
+        });
+
         if (sentinelReport.diagnoses.length > 0) {
           const top = sentinelReport.diagnoses.find(d => d.severity === "critical") || sentinelReport.diagnoses[0];
           setActiveNudgeToast(top);
+          if (sentinelSettings.soundChime) {
+            playChimeTone();
+          }
+          if (activeProject) {
+            MasterCraftSentinel.dispatchRemotePush(sentinelSettings, top, activeProject.title);
+          }
         }
       }
     }, 20000);
 
     return () => clearInterval(intervalTimer);
-  }, [sentinelSettings.enabled, sentinelSettings.intervalMinutes, lastNudgeTimestamp, sentinelReport.diagnoses]);
+  }, [sentinelSettings.enabled, sentinelSettings.intervalMinutes, sentinelSettings.soundChime, lastNudgeTimestamp, sentinelReport.diagnoses, activeProject]);
 
   const activeSegment = useMemo(() => {
     if (workspace.activeSegmentId && workspace.segments[workspace.activeSegmentId]) {
@@ -1262,6 +1320,7 @@ export default function App() {
         onClose={() => setIsSentinelModalOpen(false)}
         report={sentinelReport}
         settings={sentinelSettings}
+        projectTitle={activeProject?.title}
         onUpdateSettings={(newSettings: SentinelSettings) => {
           setSentinelSettings(newSettings);
           try {
@@ -1275,6 +1334,9 @@ export default function App() {
         onTriggerTestNudge={() => {
           if (sentinelReport.diagnoses.length > 0) {
             setActiveNudgeToast(sentinelReport.diagnoses[0]);
+            if (sentinelSettings.soundChime) {
+              playChimeTone();
+            }
           }
         }}
       />
@@ -1283,13 +1345,18 @@ export default function App() {
       {activeNudgeToast && (
         <div className="fixed bottom-6 right-6 max-w-md p-4 rounded-xl bg-[#141416] border border-[#C8A051]/60 shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-3 duration-300">
           <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-[#C8A051]/20 flex items-center justify-center text-[#C8A051]">
                 <ShieldAlert className="w-3.5 h-3.5" />
               </div>
               <span className="text-[11px] font-bold uppercase tracking-wider text-[#C8A051]">
                 {activeNudgeToast.schoolLabel}
               </span>
+              {activeNudgeToast.lapsedNotice && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#BF614B]/25 text-[#BF614B] border border-[#BF614B]/40 font-semibold">
+                  {activeNudgeToast.lapsedNotice}
+                </span>
+              )}
             </div>
             <button
               onClick={() => setActiveNudgeToast(null)}

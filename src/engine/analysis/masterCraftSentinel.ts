@@ -39,18 +39,60 @@ export interface MasterCraftReport {
   diagnoses: MasterCraftDiagnosis[];
 }
 
+export type SentinelCadenceOption =
+  | "15m"
+  | "30m"
+  | "1h"
+  | "3h"
+  | "6h"
+  | "12h"
+  | "1d"
+  | "3d"
+  | "1w"
+  | "2w"
+  | "custom";
+
+export type PushNotificationChannel = "none" | "ntfy" | "webhook" | "email";
+
 export interface SentinelSettings {
   enabled: boolean;
-  intervalMinutes: number; // 15, 30, 45, 60
+  intervalMinutes: number; // in minutes: 15, 30, 60, 180, 360, 720, 1440, 4320, 10080, 20160
+  cadenceLabel: string;
   soundChime: boolean;
   focusModeOnly: boolean;
+  openAwareAlerts: boolean; // alert immediately if interval elapsed while program was closed
+  lastCheckTimestamp: number;
+  pushChannel: PushNotificationChannel;
+  ntfyTopic: string; // e.g. "writ-alerts-bruno" for free instant iOS/Android phone push via ntfy.sh
+  webhookUrl: string; // custom webhook URL (Pushover, Telegram, Slack, Zapier)
+  notificationEmail: string; // optional email destination
 }
+
+export const CADENCE_PRESETS: { id: SentinelCadenceOption; label: string; minutes: number }[] = [
+  { id: "15m", label: "15 Minutes (Active Sprint)", minutes: 15 },
+  { id: "30m", label: "30 Minutes (Standard Focus)", minutes: 30 },
+  { id: "1h", label: "1 Hour (Deep Session)", minutes: 60 },
+  { id: "3h", label: "3 Hours (Half Day Reflection)", minutes: 180 },
+  { id: "6h", label: "6 Hours (Daily Milestone)", minutes: 360 },
+  { id: "12h", label: "12 Hours (Twice Daily)", minutes: 720 },
+  { id: "1d", label: "1 Day (Daily Sentinel)", minutes: 1440 },
+  { id: "3d", label: "3 Days (Bi-Weekly Review)", minutes: 4320 },
+  { id: "1w", label: "1 Week (Weekly Check-In)", minutes: 10080 },
+  { id: "2w", label: "2 Weeks (Fortnightly Review)", minutes: 20160 }
+];
 
 export const defaultSentinelSettings: SentinelSettings = {
   enabled: true,
-  intervalMinutes: 30,
+  intervalMinutes: 1440, // default 1 day for literary inquiry
+  cadenceLabel: "1 Day (Daily Sentinel)",
   soundChime: true,
-  focusModeOnly: false
+  focusModeOnly: false,
+  openAwareAlerts: true,
+  lastCheckTimestamp: Date.now(),
+  pushChannel: "none",
+  ntfyTopic: "writ-craft-alerts",
+  webhookUrl: "",
+  notificationEmail: ""
 };
 
 /**
@@ -312,5 +354,102 @@ export class MasterCraftSentinel {
       },
       diagnoses: []
     };
+  }
+
+  public static checkLapsedInterval(
+    settings: SentinelSettings,
+    currentTimestamp: number = Date.now()
+  ): { isLapsed: boolean; elapsedMinutes: number; elapsedFormatted: string } {
+    if (!settings.enabled || !settings.openAwareAlerts || !settings.lastCheckTimestamp) {
+      return { isLapsed: false, elapsedMinutes: 0, elapsedFormatted: "" };
+    }
+
+    const elapsedMs = Math.max(0, currentTimestamp - settings.lastCheckTimestamp);
+    const elapsedMinutes = Math.floor(elapsedMs / (60 * 1000));
+    const isLapsed = elapsedMinutes >= settings.intervalMinutes;
+
+    let elapsedFormatted = "";
+    if (elapsedMinutes < 60) {
+      elapsedFormatted = `${elapsedMinutes}m`;
+    } else if (elapsedMinutes < 1440) {
+      const hours = Math.floor(elapsedMinutes / 60);
+      elapsedFormatted = `${hours}h`;
+    } else if (elapsedMinutes < 10080) {
+      const days = Math.floor(elapsedMinutes / 1440);
+      elapsedFormatted = `${days}d`;
+    } else {
+      const weeks = Math.floor(elapsedMinutes / 10080);
+      elapsedFormatted = `${weeks}w`;
+    }
+
+    return { isLapsed, elapsedMinutes, elapsedFormatted };
+  }
+
+  public static async dispatchRemotePush(
+    settings: SentinelSettings,
+    diagnosis: MasterCraftDiagnosis,
+    projectTitle: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (settings.pushChannel === "none") {
+      return { success: true };
+    }
+
+    const title = `Writ Alert: ${diagnosis.schoolLabel}`;
+    const message = `Section ${diagnosis.segmentRoman} (${diagnosis.segmentTitle}) in "${projectTitle}":\n${diagnosis.headline}\n\n${diagnosis.recommendation}`;
+
+    try {
+      if (settings.pushChannel === "ntfy") {
+        const topic = (settings.ntfyTopic || "writ-craft-alerts").trim();
+        const res = await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
+          method: "POST",
+          headers: {
+            "Title": title,
+            "Priority": diagnosis.severity === "critical" ? "high" : "default",
+            "Tags": "writing_hand,warning"
+          },
+          body: message
+        });
+        if (!res.ok) {
+          return { success: false, error: `ntfy.sh responded with ${res.status}` };
+        }
+        return { success: true };
+      }
+
+      if (settings.pushChannel === "webhook" && settings.webhookUrl) {
+        const res = await fetch(settings.webhookUrl.trim(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            event: "craft_nudge",
+            project: projectTitle,
+            title,
+            message,
+            diagnosis,
+            timestamp: Date.now()
+          })
+        });
+        if (!res.ok) {
+          return { success: false, error: `Webhook responded with ${res.status}` };
+        }
+        return { success: true };
+      }
+
+      if (settings.pushChannel === "email" && settings.notificationEmail) {
+        const res = await fetch("http://127.0.0.1:4983/api/sentinel/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: settings.notificationEmail.trim(),
+            subject: title,
+            body: message
+          })
+        });
+        return { success: res.ok };
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || "Failed to dispatch remote push" };
+    }
   }
 }

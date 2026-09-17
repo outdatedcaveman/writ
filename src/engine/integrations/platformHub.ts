@@ -710,6 +710,155 @@ export class PlatformHub {
     // Default to Substack formatted article
     return this.formatForSubstack(project, segment, allSegments);
   }
+
+  // Zero-Attrition Direct 1-Click Openers (Open apps & platforms with primed drafts)
+
+  public async primeSystemClipboard(text: string, htmlContent?: string): Promise<boolean> {
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        if (htmlContent && typeof window !== "undefined" && (window as any).ClipboardItem) {
+          const textBlob = new Blob([text], { type: "text/plain" });
+          const htmlBlob = new Blob([htmlContent], { type: "text/html" });
+          await navigator.clipboard.write([
+            new (window as any).ClipboardItem({
+              "text/plain": textBlob,
+              "text/html": htmlBlob
+            })
+          ]);
+          return true;
+        }
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) {
+      console.warn("Clipboard priming fallback:", e);
+      try {
+        if (typeof navigator !== "undefined" && navigator.clipboard) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch {}
+    }
+    return false;
+  }
+
+  public async openExternalUrl(url: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      if (typeof window !== "undefined" && (window as any).electronAPI?.openExternal) {
+        return await (window as any).electronAPI.openExternal(url);
+      }
+      // Fallback to server endpoint
+      const res = await fetch("/api/open-external", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url })
+      });
+      if (res.ok) return { success: true };
+      if (typeof window !== "undefined") {
+        window.open(url, "_blank");
+        return { success: true };
+      }
+      return { success: false, error: "Unable to open URL" };
+    } catch (err: any) {
+      if (typeof window !== "undefined") {
+        window.open(url, "_blank");
+        return { success: true };
+      }
+      return { success: false, error: err.message };
+    }
+  }
+
+  public async writeObsidianFile(
+    vaultPath: string,
+    filename: string,
+    content: string
+  ): Promise<{ success: boolean; filePath?: string; error?: string }> {
+    try {
+      if (typeof window !== "undefined" && (window as any).electronAPI?.writeObsidianFile) {
+        return await (window as any).electronAPI.writeObsidianFile(vaultPath, filename, content);
+      }
+      const res = await fetch("/api/obsidian/write", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vaultPath, filename, content })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  public async launchObsidianLive(params: {
+    vaultName: string;
+    vaultPath?: string;
+    project: Project;
+    wiki?: ProjectWiki;
+    segments: Segment[];
+  }): Promise<{ success: boolean; uri: string; error?: string }> {
+    const { vaultName, vaultPath, project, wiki, segments } = params;
+    const pkg = this.formatForObsidianVault(project, wiki, segments);
+    const noteFileName = `${project.title}.md`;
+    const canvasFileName = `${project.title}.canvas`;
+
+    // If vaultPath is provided, write the files directly into the vault
+    if (vaultPath && vaultPath.trim()) {
+      await this.writeObsidianFile(vaultPath.trim(), noteFileName, pkg.formattedBody);
+      if (pkg.metadata.canvasJson) {
+        await this.writeObsidianFile(vaultPath.trim(), canvasFileName, pkg.metadata.canvasJson);
+      }
+    }
+
+    // Generate Obsidian URI: obsidian://open?vault=<vaultName>&file=<fileName>
+    const cleanVault = encodeURIComponent(vaultName.trim());
+    const cleanFile = encodeURIComponent(project.title.trim());
+    const obsidianUri = `obsidian://open?vault=${cleanVault}&file=${cleanFile}`;
+
+    const openRes = await this.openExternalUrl(obsidianUri);
+    return { success: openRes.success, uri: obsidianUri, error: openRes.error };
+  }
+
+  public async launchSubstackDraft(
+    project: Project,
+    segment: Segment,
+    publicationDomain?: string
+  ): Promise<{ success: boolean; url: string }> {
+    const pkg = this.formatForSubstack(project, segment);
+    await this.primeSystemClipboard(pkg.formattedBody);
+
+    let targetUrl = "https://substack.com/publish/post";
+    if (publicationDomain && publicationDomain.trim()) {
+      const domain = publicationDomain.trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
+      targetUrl = `https://${domain}/publish/post`;
+    }
+
+    await this.openExternalUrl(targetUrl);
+    return { success: true, url: targetUrl };
+  }
+
+  public async launchGoogleDocsDraft(
+    project: Project,
+    segments: Segment[]
+  ): Promise<{ success: boolean; url: string }> {
+    const pkg = this.formatForGoogleDocs(project, segments);
+    const plain = segments.map(s => `${s.title}\n\n${s.textContent}`).join("\n\n---\n\n");
+    await this.primeSystemClipboard(plain, pkg.formattedBody);
+
+    const targetUrl = "https://docs.google.com/document/create";
+    await this.openExternalUrl(targetUrl);
+    return { success: true, url: targetUrl };
+  }
+
+  public async launchWattpadDraft(
+    project: Project,
+    segment: Segment
+  ): Promise<{ success: boolean; url: string }> {
+    const pkg = this.formatForWattpad(project, segment);
+    await this.primeSystemClipboard(pkg.formattedBody);
+
+    const targetUrl = "https://www.wattpad.com/myworks/new";
+    await this.openExternalUrl(targetUrl);
+    return { success: true, url: targetUrl };
+  }
 }
 
 export const platformHub = new PlatformHub();

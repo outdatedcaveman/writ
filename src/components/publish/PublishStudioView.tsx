@@ -182,6 +182,77 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
   const [notionResultUrl, setNotionResultUrl] = useState<string | null>(null);
   const [notionError, setNotionError] = useState<string | null>(null);
 
+  // Obsidian Vault Configuration
+  const [obsidianVaultName, setObsidianVaultName] = useState(() => {
+    try { return localStorage.getItem("writ:obsidian:vaultName") || "Writing"; } catch { return "Writing"; }
+  });
+  const [obsidianVaultPath, setObsidianVaultPath] = useState(() => {
+    try { return localStorage.getItem("writ:obsidian:vaultPath") || ""; } catch { return ""; }
+  });
+  const [isObsidianOpening, setIsObsidianOpening] = useState(false);
+
+  // Substack Configuration
+  const [substackDomain, setSubstackDomain] = useState(() => {
+    try { return localStorage.getItem("writ:substack:domain") || ""; } catch { return ""; }
+  });
+
+  const handleOpenObsidianLive = async () => {
+    setIsObsidianOpening(true);
+    try {
+      localStorage.setItem("writ:obsidian:vaultName", obsidianVaultName.trim());
+      if (obsidianVaultPath) localStorage.setItem("writ:obsidian:vaultPath", obsidianVaultPath.trim());
+    } catch {}
+
+    const res = await platformHub.launchObsidianLive({
+      vaultName: obsidianVaultName.trim() || "Writing",
+      vaultPath: obsidianVaultPath.trim() || undefined,
+      project,
+      wiki,
+      segments
+    });
+
+    setIsObsidianOpening(false);
+    if (res.success) {
+      setPublishedNotice(`Launched Obsidian! Opened "${project.title}" in vault "${obsidianVaultName}".`);
+    } else {
+      setPublishedNotice(`Obsidian URI dispatched: ${res.uri}. Verify Obsidian is installed on your system.`);
+    }
+    setTimeout(() => setPublishedNotice(null), 5000);
+  };
+
+  const handleSelectObsidianDirectory = async () => {
+    try {
+      if (typeof window !== "undefined" && (window as any).electronAPI?.selectDirectory) {
+        const dir = await (window as any).electronAPI.selectDirectory();
+        if (dir) {
+          setObsidianVaultPath(dir);
+          localStorage.setItem("writ:obsidian:vaultPath", dir);
+        }
+      }
+    } catch {}
+  };
+
+  const handleLaunchSubstack = async () => {
+    try {
+      if (substackDomain) localStorage.setItem("writ:substack:domain", substackDomain.trim());
+    } catch {}
+    await platformHub.launchSubstackDraft(project, targetSegment, substackDomain);
+    setPublishedNotice("Launched Substack draft editor! Content primed in clipboard — press Ctrl+V to paste.");
+    setTimeout(() => setPublishedNotice(null), 5000);
+  };
+
+  const handleLaunchGoogleDocs = async () => {
+    await platformHub.launchGoogleDocsDraft(project, segments);
+    setPublishedNotice("Launched Google Docs! Rich formatted draft copied with serif typography — press Ctrl+V to paste.");
+    setTimeout(() => setPublishedNotice(null), 5000);
+  };
+
+  const handleLaunchWattpad = async () => {
+    await platformHub.launchWattpadDraft(project, targetSegment);
+    setPublishedNotice("Launched Wattpad story creator! Serialized chapter primed — press Ctrl+V to paste.");
+    setTimeout(() => setPublishedNotice(null), 5000);
+  };
+
   const handlePublishToNotionDirect = async () => {
     if (!notionToken.trim()) {
       setNotionError("Please enter your Notion API Integration Token (starts with secret_...)");
@@ -221,7 +292,10 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
     setIsNotionPublishing(false);
     if (res.success && res.pageUrl) {
       setNotionResultUrl(res.pageUrl);
-      setPublishedNotice(`Created Notion page: "${project.title}" directly in your workspace!`);
+      setPublishedNotice(`Created Notion page: "${project.title}"! Opening in your browser...`);
+      // Zero-attrition: Immediately open browser directly to the new Notion page
+      platformHub.openExternalUrl(res.pageUrl);
+      setTimeout(() => setPublishedNotice(null), 5000);
     } else {
       setNotionError(res.error || "Failed to publish to Notion. Verify token and page permissions.");
     }
@@ -230,6 +304,22 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
   const handleSimulatePublish = () => {
     if (selectedPlatform === "notion") {
       handlePublishToNotionDirect();
+      return;
+    }
+    if (selectedPlatform === "obsidian") {
+      handleOpenObsidianLive();
+      return;
+    }
+    if (selectedPlatform === "substack") {
+      handleLaunchSubstack();
+      return;
+    }
+    if (selectedPlatform === "google_docs") {
+      handleLaunchGoogleDocs();
+      return;
+    }
+    if (selectedPlatform === "wattpad") {
+      handleLaunchWattpad();
       return;
     }
     setPublishedNotice(`Successfully packaged and dispatched to ${selectedPlatform.toUpperCase()}! API payload confirmed.`);
@@ -555,40 +645,77 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
                       <Layers className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-semibold text-[#ECE7DE]">Obsidian Vault & Interactive Canvas Exporter</h4>
+                      <h4 className="text-xs font-semibold text-[#ECE7DE]">Obsidian Vault & Live Canvas Integration</h4>
                       <p className="text-[11px] text-[#71717A]">
-                        Generates Markdown with YAML frontmatter, bidirectional [[wikilinks]], and interactive <span className="font-mono text-[#9E7AFF]">.canvas</span> visual map
+                        Saves Markdown with [[wikilinks]] and visual <span className="font-mono text-[#9E7AFF]">.canvas</span> map directly to your vault and launches Obsidian instantly
                       </p>
                     </div>
                   </div>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#9E7AFF]/10 text-[#9E7AFF] border border-[#9E7AFF]/30">
-                    Vault + Canvas Ready
+                    Direct Launch Ready
                   </span>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="text-[10px] uppercase font-bold tracking-wider text-[#71717A] block mb-1">
+                      Obsidian Vault Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Writing, Vault, Personal"
+                      value={obsidianVaultName}
+                      onChange={e => setObsidianVaultName(e.target.value)}
+                      className="w-full bg-[#18181B] border border-[#2A2A2E] rounded-lg px-3 py-1.5 text-xs text-[#ECE7DE] focus:border-[#9E7AFF] focus:outline-none font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold tracking-wider text-[#71717A] block mb-1">
+                      Local Vault Path (Optional)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="C:\Users\...\Obsidian\Vault"
+                        value={obsidianVaultPath}
+                        onChange={e => setObsidianVaultPath(e.target.value)}
+                        className="w-full bg-[#18181B] border border-[#2A2A2E] rounded-lg px-3 py-1.5 text-xs text-[#ECE7DE] focus:border-[#9E7AFF] focus:outline-none font-mono text-[11px]"
+                      />
+                      <button
+                        onClick={handleSelectObsidianDirectory}
+                        className="px-2.5 py-1.5 rounded-lg bg-[#222228] hover:bg-[#2c2c34] border border-[#33333e] text-xs text-[#ECE7DE] cursor-pointer shrink-0"
+                        title="Browse local Obsidian vault folder"
+                      >
+                        Browse...
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-[#1e1e24]">
+                  <button
+                    onClick={handleOpenObsidianLive}
+                    disabled={isObsidianOpening}
+                    className="px-4 py-2 rounded-lg bg-[#9E7AFF] hover:bg-[#b091ff] text-[#080808] text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-md"
+                  >
+                    <Layers className="w-4 h-4" />
+                    <span>{isObsidianOpening ? "Launching..." : "1-Click Save to Vault & Open in Obsidian ↗"}</span>
+                  </button>
+
                   <button
                     onClick={handleCopy}
-                    className="px-3.5 py-2 rounded-lg bg-[#9E7AFF] hover:bg-[#b091ff] text-[#080808] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+                    className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#9E7AFF]/40 text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
                   >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Copy Vault Markdown ([[Wikilinks]])</span>
+                    <Copy className="w-3.5 h-3.5 text-[#9E7AFF]" />
+                    <span>Copy [[Wikilinks]] Markdown</span>
                   </button>
 
                   <button
                     onClick={handleDownloadCanvas}
-                    className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#9E7AFF]/40 text-xs text-[#9E7AFF] flex items-center gap-1.5 cursor-pointer transition-all"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Download .canvas Visual Map</span>
-                  </button>
-
-                  <button
-                    onClick={handleDownload}
                     className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
                   >
                     <Download className="w-3.5 h-3.5 text-[#A09A8F]" />
-                    <span>Download Note (.md)</span>
+                    <span>Download .canvas Map</span>
                   </button>
                 </div>
               </div>
@@ -603,24 +730,32 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
                       <FileText className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-semibold text-[#ECE7DE]">Google Docs Typography Clipboard & API</h4>
+                      <h4 className="text-xs font-semibold text-[#ECE7DE]">Google Docs Zero-Attrition Publisher</h4>
                       <p className="text-[11px] text-[#71717A]">
-                        Copies rich formatted HTML to system clipboard for clean Ctrl+V paste into Google Docs with preserved headings & indentations
+                        Primes system clipboard with rich Merriweather serif styling and opens a fresh Google Doc ready for immediate Ctrl+V paste
                       </p>
                     </div>
                   </div>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#4285F4]/10 text-[#4285F4] border border-[#4285F4]/30">
-                    Rich Paste Ready
+                    Direct Launch Ready
                   </span>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2.5 pt-1">
                   <button
-                    onClick={handleCopyGoogleDocsHtml}
-                    className="px-4 py-2 rounded-lg bg-[#4285F4] hover:bg-[#5a95f5] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+                    onClick={handleLaunchGoogleDocs}
+                    className="px-4 py-2 rounded-lg bg-[#4285F4] hover:bg-[#5a95f5] text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-md"
                   >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Copy for Google Docs (Rich Formatted HTML)</span>
+                    <FileText className="w-4 h-4" />
+                    <span>1-Click Create & Open in Google Docs ↗</span>
+                  </button>
+
+                  <button
+                    onClick={handleCopyGoogleDocsHtml}
+                    className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#4285F4]/40 text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-[#4285F4]" />
+                    <span>Copy Formatted HTML</span>
                   </button>
 
                   <button
@@ -636,8 +771,8 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
                     }}
                     className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
                   >
-                    <Download className="w-3.5 h-3.5 text-[#4285F4]" />
-                    <span>Download Docs API JSON (batchUpdate)</span>
+                    <Download className="w-3.5 h-3.5 text-[#A09A8F]" />
+                    <span>Download Docs API JSON</span>
                   </button>
                 </div>
               </div>
@@ -652,32 +787,58 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
                       <BookMarked className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-semibold text-[#ECE7DE]">Substack Newsletter Dispatch</h4>
+                      <h4 className="text-xs font-semibold text-[#ECE7DE]">Substack Zero-Attrition Newsletter Launcher</h4>
                       <p className="text-[11px] text-[#71717A]">
-                        Includes headline, subtitle inquiry, byline, <span className="font-mono text-[#FF6719]">&lt;!-- paywall --&gt;</span> subscriber gate, and footer CTA
+                        Formats headline, paywall cut, and subscriber CTA, pre-copies draft, and directly opens Substack post creator
                       </p>
                     </div>
                   </div>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#FF6719]/10 text-[#FF6719] border border-[#FF6719]/30">
-                    Newsletter Layout
+                    Direct Launch Ready
                   </span>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="text-[10px] uppercase font-bold tracking-wider text-[#71717A] block mb-1">
+                      Publication Subdomain (Optional)
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-mono text-[#71717A]">https://</span>
+                      <input
+                        type="text"
+                        placeholder="yourpublication.substack.com"
+                        value={substackDomain}
+                        onChange={e => setSubstackDomain(e.target.value)}
+                        className="w-full bg-[#18181B] border border-[#2A2A2E] rounded-lg px-3 py-1.5 text-xs text-[#ECE7DE] focus:border-[#FF6719] focus:outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-[#1e1e24]">
+                  <button
+                    onClick={handleLaunchSubstack}
+                    className="px-4 py-2 rounded-lg bg-[#FF6719] hover:bg-[#ff7b36] text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-md"
+                  >
+                    <BookMarked className="w-4 h-4" />
+                    <span>1-Click Launch Ready Draft in Substack ↗</span>
+                  </button>
+
                   <button
                     onClick={handleCopy}
-                    className="px-4 py-2 rounded-lg bg-[#FF6719] hover:bg-[#ff7b36] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+                    className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#FF6719]/40 text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
                   >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Copy Substack Newsletter Post</span>
+                    <Copy className="w-3.5 h-3.5 text-[#FF6719]" />
+                    <span>Copy Substack Post</span>
                   </button>
 
                   <button
                     onClick={handleDownload}
                     className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
                   >
-                    <Download className="w-3.5 h-3.5 text-[#FF6719]" />
-                    <span>Download Substack .md</span>
+                    <Download className="w-3.5 h-3.5 text-[#A09A8F]" />
+                    <span>Download .md</span>
                   </button>
                 </div>
               </div>
@@ -692,32 +853,40 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
                       <FileText className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-semibold text-[#ECE7DE]">Wattpad Serial Episode Exporter</h4>
+                      <h4 className="text-xs font-semibold text-[#ECE7DE]">Wattpad Serial Chapter Launcher</h4>
                       <p className="text-[11px] text-[#71717A]">
-                        Serialized Part numbering, teaser quote, cliffhanger pacing, vote & comment CTAs, and discoverability tag cloud
+                        Serialized Part numbering, teaser quote, cliffhanger pacing, vote & comment CTAs, pre-copied for instant story creation
                       </p>
                     </div>
                   </div>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#FF500A]/10 text-[#FF500A] border border-[#FF500A]/30">
-                    Serialized Format
+                    Direct Launch Ready
                   </span>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2.5 pt-1">
                   <button
-                    onClick={handleCopy}
-                    className="px-4 py-2 rounded-lg bg-[#FF500A] hover:bg-[#ff682b] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+                    onClick={handleLaunchWattpad}
+                    className="px-4 py-2 rounded-lg bg-[#FF500A] hover:bg-[#ff682b] text-white text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-md"
                   >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Copy Wattpad Serial Chapter</span>
+                    <FileText className="w-4 h-4" />
+                    <span>1-Click Launch Draft in Wattpad ↗</span>
+                  </button>
+
+                  <button
+                    onClick={handleCopy}
+                    className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#FF500A]/40 text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-[#FF500A]" />
+                    <span>Copy Serial Chapter</span>
                   </button>
 
                   <button
                     onClick={handleDownload}
                     className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
                   >
-                    <Download className="w-3.5 h-3.5 text-[#FF500A]" />
-                    <span>Download Wattpad .md</span>
+                    <Download className="w-3.5 h-3.5 text-[#A09A8F]" />
+                    <span>Download .md</span>
                   </button>
                 </div>
               </div>
@@ -734,7 +903,7 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
                     <div>
                       <h4 className="text-xs font-semibold text-[#ECE7DE]">Notion Workspace Direct Integration</h4>
                       <p className="text-[11px] text-[#71717A]">
-                        Publish directly as live blocks into your Notion workspace, or copy paste-ready rich Markdown
+                        Publish directly as live blocks into your Notion workspace and automatically open the resulting page in your browser
                       </p>
                     </div>
                   </div>
@@ -778,9 +947,9 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
 
                 {notionResultUrl && (
                   <div className="p-3 rounded-lg bg-[#7E9F86]/15 border border-[#7E9F86]/40 text-xs text-[#7E9F86] flex items-center justify-between">
-                    <span>Page published successfully!</span>
+                    <span>Page published and opened in browser!</span>
                     <a href={notionResultUrl} target="_blank" rel="noreferrer" className="underline font-medium hover:text-white">
-                      Open in Notion ↗
+                      View Page ↗
                     </a>
                   </div>
                 )}
@@ -789,10 +958,10 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
                   <button
                     onClick={handlePublishToNotionDirect}
                     disabled={isNotionPublishing}
-                    className="px-4 py-2 rounded-lg bg-[#ECE7DE] hover:bg-white text-[#080808] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-50"
+                    className="px-4 py-2 rounded-lg bg-[#ECE7DE] hover:bg-white text-[#080808] text-xs font-bold flex items-center gap-2 cursor-pointer transition-all disabled:opacity-50 shadow-md"
                   >
                     <Send className="w-3.5 h-3.5" />
-                    <span>{isNotionPublishing ? "Publishing to Notion..." : "Publish Live to Notion"}</span>
+                    <span>{isNotionPublishing ? "Publishing to Notion..." : "1-Click Publish & Open in Notion ↗"}</span>
                   </button>
 
                   <button
@@ -805,7 +974,7 @@ export const PublishStudioView: React.FC<PublishStudioViewProps> = ({
                     className="px-3.5 py-2 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
                   >
                     <Copy className="w-3.5 h-3.5 text-[#C8A051]" />
-                    <span>Copy for Instant Paste (Native Notion Blocks)</span>
+                    <span>Copy for Instant Paste</span>
                   </button>
                 </div>
               </div>

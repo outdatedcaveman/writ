@@ -2,7 +2,10 @@ import React, { useState } from "react";
 import {
   MasterCraftReport,
   MasterCraftDiagnosis,
-  SentinelSettings
+  SentinelSettings,
+  CADENCE_PRESETS,
+  PushNotificationChannel,
+  MasterCraftSentinel
 } from "../../engine/analysis/masterCraftSentinel";
 import {
   ShieldAlert,
@@ -20,7 +23,12 @@ import {
   X,
   Compass,
   Bookmark,
-  GitCommit
+  GitCommit,
+  Smartphone,
+  Mail,
+  Webhook,
+  Send,
+  Check
 } from "lucide-react";
 
 interface MasterCraftSentinelModalProps {
@@ -31,6 +39,7 @@ interface MasterCraftSentinelModalProps {
   onUpdateSettings: (settings: SentinelSettings) => void;
   onFocusSection: (segmentId: string) => void;
   onTriggerTestNudge?: () => void;
+  projectTitle?: string;
 }
 
 export const MasterCraftSentinelModal: React.FC<MasterCraftSentinelModalProps> = ({
@@ -40,11 +49,54 @@ export const MasterCraftSentinelModal: React.FC<MasterCraftSentinelModalProps> =
   settings,
   onUpdateSettings,
   onFocusSection,
-  onTriggerTestNudge
+  onTriggerTestNudge,
+  projectTitle = "Active Manuscript"
 }) => {
   if (!isOpen) return null;
 
   const [selectedSchool, setSelectedSchool] = useState<string>("all");
+  const [isTestingPush, setIsTestingPush] = useState(false);
+  const [testPushStatus, setTestPushStatus] = useState<string | null>(null);
+
+  const handleSendTestPush = async () => {
+    setIsTestingPush(true);
+    setTestPushStatus("Dispatching alert...");
+
+    const testDiag: MasterCraftDiagnosis = report.diagnoses[0] || {
+      id: "test-diag",
+      school: "gilligan",
+      schoolLabel: "Gilligan's Law of Causality",
+      severity: "warning",
+      segmentId: "test-seg",
+      segmentRoman: "IV",
+      segmentTitle: "The Pivotal Shift",
+      loadBearingScore: 85,
+      developmentScore: 30,
+      deficitScore: 68,
+      headline: "Immediate Consequence Missing in Turning Point",
+      principle: "Every action must produce an equal and opposite narrative reaction.",
+      recommendation: "Introduce the immediate causal fallout before progressing to subsequent events.",
+      suggestedPrompt: "Elaborate the immediate reaction to the confession."
+    };
+
+    const res = await MasterCraftSentinel.dispatchRemotePush(
+      settings,
+      testDiag,
+      projectTitle || "Active Manuscript"
+    );
+
+    setIsTestingPush(false);
+    if (res.success) {
+      setTestPushStatus(
+        settings.pushChannel === "none"
+          ? "Local alert confirmed."
+          : `Push sent to ${settings.pushChannel.toUpperCase()}!`
+      );
+    } else {
+      setTestPushStatus(`Failed: ${res.error || "Unknown error"}`);
+    }
+    setTimeout(() => setTestPushStatus(null), 5000);
+  };
 
   const filteredDiagnoses =
     selectedSchool === "all"
@@ -137,65 +189,182 @@ export const MasterCraftSentinelModal: React.FC<MasterCraftSentinelModalProps> =
               </div>
             </div>
 
-            {/* Proactive Interval Nudge Configuration */}
-            <div className="md:col-span-2 p-4 rounded-xl bg-[#141418] border border-[#24242c] space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-[#C8A051] flex items-center gap-1.5 font-semibold">
-                  <Bell className="w-3.5 h-3.5" />
-                  Proactive Author Nudge Interval Alarms
-                </span>
-                <label className="flex items-center gap-2 text-xs text-[#A09A8F] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.enabled}
-                    onChange={e => onUpdateSettings({ ...settings, enabled: e.target.checked })}
-                    className="accent-[#C8A051] rounded"
-                  />
-                  <span>Alarm Active</span>
-                </label>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                <div className="flex items-center gap-1.5 bg-[#0c0c0e] p-1 rounded-lg border border-[#1e1e24] text-xs">
-                  {[15, 30, 45, 60].map(mins => (
-                    <button
-                      key={mins}
-                      onClick={() => onUpdateSettings({ ...settings, intervalMinutes: mins })}
-                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                        settings.intervalMinutes === mins
-                          ? "bg-[#25252c] text-[#ECE7DE] shadow"
-                          : "text-[#71717A] hover:text-[#ECE7DE]"
-                      }`}
-                    >
-                      Every {mins}m
-                    </button>
-                  ))}
+            {/* Proactive Interval Nudge & Remote Phone Alert Configuration */}
+            <div className="md:col-span-2 p-4 rounded-xl bg-[#141418] border border-[#24242c] space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1e1e24] pb-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-[#C8A051] flex items-center gap-1.5 font-semibold">
+                    <Bell className="w-3.5 h-3.5" />
+                    Proactive Author Nudge & Interval Alarms
+                  </span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#C8A051]/10 text-[#C8A051] border border-[#C8A051]/30">
+                    Open-Aware
+                  </span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 text-xs text-[#ECE7DE] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.enabled}
+                      onChange={e => onUpdateSettings({ ...settings, enabled: e.target.checked })}
+                      className="accent-[#C8A051] rounded"
+                    />
+                    <span>Alarm Active</span>
+                  </label>
+
+                  <label className="flex items-center gap-1.5 text-xs text-[#A09A8F] hover:text-[#ECE7DE] cursor-pointer" title="Alert immediately upon reopening if interval elapsed while program was closed">
+                    <input
+                      type="checkbox"
+                      checked={settings.openAwareAlerts}
+                      onChange={e => onUpdateSettings({ ...settings, openAwareAlerts: e.target.checked })}
+                      className="accent-[#C8A051] rounded"
+                    />
+                    <span>Open-Aware</span>
+                  </label>
+
                   <button
                     onClick={() => onUpdateSettings({ ...settings, soundChime: !settings.soundChime })}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs cursor-pointer transition-colors ${
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] cursor-pointer transition-colors ${
                       settings.soundChime
                         ? "bg-[#7E9F86]/15 border-[#7E9F86]/40 text-[#7E9F86]"
                         : "bg-[#18181c] border-[#26262e] text-[#71717A]"
                     }`}
                     title="Audio chime alert on nudge"
                   >
-                    {settings.soundChime ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-                    <span>Chime {settings.soundChime ? "On" : "Off"}</span>
+                    {settings.soundChime ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
+                    <span>Chime</span>
                   </button>
-
-                  {onTriggerTestNudge && (
-                    <button
-                      onClick={onTriggerTestNudge}
-                      className="px-2.5 py-1 rounded-lg bg-[#1e1e24] hover:bg-[#282830] border border-[#2c2c36] text-[#A09A8F] hover:text-[#ECE7DE] text-xs cursor-pointer transition-colors"
-                      title="Test firing the gentle nudge alarm notification"
-                    >
-                      Test Alert
-                    </button>
-                  )}
                 </div>
+              </div>
+
+              {/* Cadence Selection: Minutes to Weeks */}
+              <div className="space-y-1.5">
+                <div className="text-[10px] font-mono uppercase text-[#71717A] flex items-center justify-between">
+                  <span>Cadence Interval (Hours · Days · Weeks)</span>
+                  <span className="text-[#ECE7DE] font-semibold">{settings.cadenceLabel || `${settings.intervalMinutes}m`}</span>
+                </div>
+                <div className="grid grid-cols-5 sm:grid-cols-10 gap-1 bg-[#0c0c0e] p-1.5 rounded-lg border border-[#1e1e24] text-[11px]">
+                  {CADENCE_PRESETS.map(preset => (
+                    <button
+                      key={preset.id}
+                      onClick={() => onUpdateSettings({
+                        ...settings,
+                        intervalMinutes: preset.minutes,
+                        cadenceLabel: preset.label
+                      })}
+                      className={`py-1 px-1 rounded text-center font-medium transition-colors cursor-pointer ${
+                        settings.intervalMinutes === preset.minutes
+                          ? "bg-[#C8A051] text-[#080808] font-bold shadow"
+                          : "text-[#8E8E93] hover:text-[#ECE7DE] hover:bg-[#18181c]"
+                      }`}
+                      title={preset.label}
+                    >
+                      {preset.id}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Remote Phone & Email Push Alerts */}
+              <div className="pt-2 border-t border-[#1e1e24] space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono uppercase text-[#71717A] flex items-center gap-1">
+                    <Smartphone className="w-3 h-3 text-[#7E9F86]" />
+                    Remote Phone & Webhook Alerts
+                  </span>
+                  <div className="flex items-center gap-1 text-[11px]">
+                    {(["none", "ntfy", "webhook", "email"] as PushNotificationChannel[]).map(ch => (
+                      <button
+                        key={ch}
+                        onClick={() => onUpdateSettings({ ...settings, pushChannel: ch })}
+                        className={`px-2 py-0.5 rounded capitalize transition-colors cursor-pointer ${
+                          settings.pushChannel === ch
+                            ? "bg-[#25252c] text-[#ECE7DE] font-semibold border border-[#383844]"
+                            : "text-[#71717A] hover:text-[#ECE7DE]"
+                        }`}
+                      >
+                        {ch === "ntfy" ? "Phone (ntfy)" : ch}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {settings.pushChannel === "ntfy" && (
+                  <div className="p-2.5 rounded-lg bg-[#0c0c0e] border border-[#1e1e24] space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="text-[10px] font-mono text-[#A09A8F] shrink-0">ntfy.sh/</span>
+                        <input
+                          type="text"
+                          value={settings.ntfyTopic || "writ-craft-alerts"}
+                          onChange={e => onUpdateSettings({ ...settings, ntfyTopic: e.target.value })}
+                          placeholder="your-custom-topic"
+                          className="bg-[#141418] border border-[#26262e] rounded px-2 py-1 text-xs text-[#ECE7DE] focus:border-[#C8A051] focus:outline-none flex-1 font-mono"
+                        />
+                      </div>
+                      <button
+                        onClick={handleSendTestPush}
+                        disabled={isTestingPush}
+                        className="px-2.5 py-1 rounded bg-[#7E9F86]/20 border border-[#7E9F86]/40 hover:bg-[#7E9F86]/30 text-[#7E9F86] text-xs font-medium cursor-pointer transition-colors shrink-0 flex items-center gap-1"
+                      >
+                        <Send className="w-3 h-3" />
+                        <span>{isTestingPush ? "Testing..." : "Send Test Phone Push"}</span>
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-[#71717A] leading-relaxed">
+                      Install the free <strong className="text-[#ECE7DE]">ntfy</strong> app on iOS or Android and subscribe to topic <code className="text-[#C8A051]">{settings.ntfyTopic || "writ-craft-alerts"}</code> for instant alerts to your phone. Zero account required.
+                    </p>
+                  </div>
+                )}
+
+                {settings.pushChannel === "webhook" && (
+                  <div className="p-2.5 rounded-lg bg-[#0c0c0e] border border-[#1e1e24] space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="url"
+                        value={settings.webhookUrl || ""}
+                        onChange={e => onUpdateSettings({ ...settings, webhookUrl: e.target.value })}
+                        placeholder="https://hooks.slack.com/... or Pushover / Zapier URL"
+                        className="bg-[#141418] border border-[#26262e] rounded px-2 py-1 text-xs text-[#ECE7DE] focus:border-[#C8A051] focus:outline-none flex-1 font-mono"
+                      />
+                      <button
+                        onClick={handleSendTestPush}
+                        disabled={isTestingPush}
+                        className="px-2.5 py-1 rounded bg-[#1e1e24] hover:bg-[#282830] border border-[#2c2c36] text-[#A09A8F] hover:text-[#ECE7DE] text-xs cursor-pointer transition-colors shrink-0"
+                      >
+                        {isTestingPush ? "Sending..." : "Test Webhook"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {settings.pushChannel === "email" && (
+                  <div className="p-2.5 rounded-lg bg-[#0c0c0e] border border-[#1e1e24] space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="email"
+                        value={settings.notificationEmail || ""}
+                        onChange={e => onUpdateSettings({ ...settings, notificationEmail: e.target.value })}
+                        placeholder="author@example.com"
+                        className="bg-[#141418] border border-[#26262e] rounded px-2 py-1 text-xs text-[#ECE7DE] focus:border-[#C8A051] focus:outline-none flex-1 font-mono"
+                      />
+                      <button
+                        onClick={handleSendTestPush}
+                        disabled={isTestingPush}
+                        className="px-2.5 py-1 rounded bg-[#1e1e24] hover:bg-[#282830] border border-[#2c2c36] text-[#A09A8F] hover:text-[#ECE7DE] text-xs cursor-pointer transition-colors shrink-0"
+                      >
+                        {isTestingPush ? "Sending..." : "Test Email"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {testPushStatus && (
+                  <div className="text-[11px] font-mono text-[#7E9F86] px-1 animate-in fade-in">
+                    {testPushStatus}
+                  </div>
+                )}
               </div>
             </div>
           </div>

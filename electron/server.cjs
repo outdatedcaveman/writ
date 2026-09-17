@@ -395,6 +395,64 @@ function handleApiRequest(req, res, pathname, parsedUrl) {
     return;
   }
 
+  // Open external URL via server fallback (HTTP mode)
+  if (pathname === '/api/open-external' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { url } = JSON.parse(body);
+        if (!url) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'URL required' }));
+          return;
+        }
+        const { exec } = require('child_process');
+        if (process.platform === 'win32') {
+          exec(`start "" "${url.replace(/"/g, '""')}"`);
+        } else if (process.platform === 'darwin') {
+          exec(`open "${url.replace(/"/g, '\\"')}"`);
+        } else {
+          exec(`xdg-open "${url.replace(/"/g, '\\"')}"`);
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // Write file to local Obsidian vault directory
+  if (pathname === '/api/obsidian/write' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { vaultPath, filename, content } = JSON.parse(body);
+        if (!vaultPath || !filename) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'vaultPath and filename required' }));
+          return;
+        }
+        const targetDir = path.resolve(vaultPath);
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+        const filePath = path.join(targetDir, filename);
+        fs.writeFileSync(filePath, content, 'utf-8');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, filePath }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   // Default 404 for unknown API
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Endpoint not found' }));

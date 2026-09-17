@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { startServer, DATA_DIR, PROJECTS_DIR, TRASH_DIR } = require('./server.cjs');
@@ -160,6 +160,33 @@ ipcMain.handle('select-directory', async () => {
     properties: ['openDirectory']
   });
   return result.filePaths[0] || null;
+});
+
+ipcMain.handle('open-external', async (event, url) => {
+  try {
+    if (url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('obsidian://') || url.startsWith('mailto:'))) {
+      await shell.openExternal(url);
+      return { success: true };
+    }
+    return { success: false, error: 'Invalid URL scheme' };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('write-obsidian-file', async (event, { vaultPath, filename, content }) => {
+  try {
+    if (!vaultPath || !filename) return { success: false, error: 'Missing vault path or filename' };
+    const targetDir = path.resolve(vaultPath);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    const filePath = path.join(targetDir, filename);
+    fs.writeFileSync(filePath, content, 'utf-8');
+    return { success: true, filePath };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 });
 
 app.whenReady().then(createWindow);
