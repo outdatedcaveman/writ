@@ -52,6 +52,7 @@ import {
   Inbox,
   ShieldAlert,
   Bell,
+  Edit3,
   X
 } from "lucide-react";
 
@@ -290,6 +291,102 @@ export default function App() {
 
     return () => clearInterval(intervalTimer);
   }, [sentinelSettings.enabled, sentinelSettings.intervalMinutes, sentinelSettings.soundChime, lastNudgeTimestamp, sentinelReport.diagnoses, activeProject]);
+
+  // Global background poller for drop folder and Notion Writ Vault sync items
+  useEffect(() => {
+    const pollVaultItems = async () => {
+      try {
+        const res = await fetch("http://localhost:4983/api/vault/items");
+        if (!res.ok) return;
+        const items: any[] = await res.json();
+        if (!Array.isArray(items) || items.length === 0) return;
+
+        updateState(prev => {
+          let hasChanges = false;
+          const nextVaultItems = { ...prev.projectVaultItems };
+
+          items.forEach(it => {
+            // Match target project:
+            // 1. By it.projectId if specified and matches a valid project
+            // 2. Or by it.projectTitle or tags matching a project title or slug
+            // 3. Or fallback to activeProjectId
+            let targetProj = prev.projects.find(p => p.id === it.projectId);
+            if (!targetProj && it.projectTitle) {
+              const cleanTitle = it.projectTitle.trim().toLowerCase();
+              targetProj = prev.projects.find(
+                p => p.title.toLowerCase() === cleanTitle || p.slug.toLowerCase() === cleanTitle
+              );
+            }
+            if (!targetProj && it.extractedInsights?.thematicTags) {
+              const tags: string[] = it.extractedInsights.thematicTags;
+              targetProj = prev.projects.find(p => 
+                tags.some(t => t.toLowerCase() === p.title.toLowerCase() || t.toLowerCase() === p.slug.toLowerCase())
+              );
+            }
+            if (!targetProj) {
+              targetProj = prev.projects.find(p => p.id === prev.activeProjectId) || prev.projects[0];
+            }
+            if (!targetProj) return;
+
+            const existingForProj = nextVaultItems[targetProj.id] || [];
+            const exists = existingForProj.some(
+              existing => existing.id === it.id || (existing.content === it.content && it.content && it.content.length > 0)
+            );
+
+            if (!exists) {
+              const itemId = it.id || `pv-${Date.now().toString(36)}`;
+              const extractedInsights = extractInsightsFromDrop(it.content || "", it.type || "text");
+              const projectSegments = Object.values(prev.segments).filter(
+                s => s.draftId === targetProj.activeDraftId
+              );
+              const projWiki = prev.wikis[targetProj.id];
+              const suggestion = analyzeAndSuggestPlacement(
+                {
+                  id: itemId,
+                  projectId: targetProj.id,
+                  type: it.type || "text",
+                  title: it.title || "Dropped Asset",
+                  content: it.content || "",
+                  mediaUrl: it.mediaUrl,
+                  timestamp: it.droppedAt || Date.now(),
+                  extractedInsights
+                },
+                targetProj,
+                projectSegments,
+                projWiki,
+                prev.threads
+              );
+
+              const newItem: ProjectVaultItem = {
+                id: itemId,
+                projectId: targetProj.id,
+                type: it.type || "text",
+                title: it.title || "Dropped Asset",
+                content: it.content || "",
+                mediaUrl: it.mediaUrl,
+                timestamp: it.droppedAt || Date.now(),
+                extractedInsights,
+                placementSuggestion: suggestion,
+                status: "inbox"
+              };
+
+              nextVaultItems[targetProj.id] = [newItem, ...existingForProj];
+              hasChanges = true;
+            }
+          });
+
+          if (!hasChanges) return prev;
+          return {
+            ...prev,
+            projectVaultItems: nextVaultItems
+          };
+        });
+      } catch {}
+    };
+
+    const interval = setInterval(pollVaultItems, 3500);
+    return () => clearInterval(interval);
+  }, []);
 
   const activeSegment = useMemo(() => {
     if (workspace.activeSegmentId && workspace.segments[workspace.activeSegmentId]) {
@@ -926,27 +1023,49 @@ export default function App() {
         <header className="h-11 border-b border-[#18181A] bg-[#0A0A0C] px-5 flex items-center justify-between shrink-0 select-none">
           {/* Left Breadcrumb - Truncated, Never Wraps */}
           <div className="flex items-center gap-2 min-w-0 mr-4">
-            <span className="font-sans text-xs font-semibold tracking-tight text-[#ECE7DE] truncate max-w-[180px]">
-              {activeProject.title}
-            </span>
+            <div className="flex items-center gap-1.5 group">
+              <span className="font-sans text-xs font-semibold tracking-tight text-[#ECE7DE] truncate max-w-[180px]">
+                {activeProject.title}
+              </span>
+              <button
+                onClick={() => setIsProjectSettingsOpen(true)}
+                className="p-1 rounded hover:bg-[#18181B] text-[#71717A] hover:text-[#C8A051] transition-colors cursor-pointer"
+                title="Edit Project Properties (Title, Premise, Genre, Bible)"
+              >
+                <Settings className="w-3 h-3" />
+              </button>
+            </div>
             <span className="text-xs text-[#3F3F46]">/</span>
-            <span className="text-xs text-[#8E8E93] truncate max-w-[260px]">
-              {activeView === "editor" && activeSegment
-                ? `Section ${activeSegment.romanNumeral} · ${activeSegment.title}`
-                : activeView === "projectVault"
-                ? "Project Drop Vault"
-                : activeView === "publish"
-                ? "Publishing Studio"
-                : activeView === "wiki"
-                ? "Story Bible & Wiki"
-                : activeView === "diagrams"
-                ? "Relationship Graph"
-                : activeView === "timeline"
-                ? "Timeline Matrix"
-                : activeView === "threads"
-                ? "Thread Watchdog"
-                : "Voice Profile Vault"}
-            </span>
+            {activeView === "editor" && activeSegment ? (
+              <div className="flex items-center gap-1.5 group">
+                <span className="text-xs text-[#8E8E93] truncate max-w-[260px]">
+                  Section {activeSegment.romanNumeral} · {activeSegment.title}
+                </span>
+                <button
+                  onClick={() => setIsSegmentSettingsOpen(true)}
+                  className="p-1 rounded hover:bg-[#18181B] text-[#71717A] hover:text-[#C8A051] transition-colors cursor-pointer"
+                  title="Edit Chapter Properties & Beat Deliverables"
+                >
+                  <Edit3 className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <span className="text-xs text-[#8E8E93] truncate max-w-[260px]">
+                {activeView === "projectVault"
+                  ? "Project Drop Vault"
+                  : activeView === "publish"
+                  ? "Publishing Studio"
+                  : activeView === "wiki"
+                  ? "Story Bible & Wiki"
+                  : activeView === "diagrams"
+                  ? "Relationship Graph"
+                  : activeView === "timeline"
+                  ? "Timeline Matrix"
+                  : activeView === "threads"
+                  ? "Thread Watchdog"
+                  : "Voice Profile Vault"}
+              </span>
+            )}
           </div>
 
           {/* Right Controls & Utilities */}
@@ -1290,9 +1409,11 @@ export default function App() {
       {/* MODAL: Chapter / Segment Metadata */}
       {activeSegment && (
         <SegmentMetadataModal
+          key={activeSegment.id}
           isOpen={isSegmentSettingsOpen}
           onClose={() => setIsSegmentSettingsOpen(false)}
           segment={activeSegment}
+          projectTitle={activeProject?.title}
           onSave={handleSaveSegmentSettings}
         />
       )}

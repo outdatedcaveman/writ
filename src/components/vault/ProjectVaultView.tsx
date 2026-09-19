@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ProjectVaultItem,
   VaultItemType,
@@ -20,8 +20,16 @@ import {
   Link2,
   Filter,
   Layers,
-  Wand2
+  Wand2,
+  Cloud,
+  RefreshCw,
+  FolderPlus,
+  ChevronDown,
+  ChevronUp,
+  Check,
+  ExternalLink
 } from "lucide-react";
+import { platformHub, NotionVaultSyncConfig } from "../../engine/integrations/platformHub";
 
 interface ProjectVaultViewProps {
   project: Project;
@@ -81,6 +89,96 @@ export const ProjectVaultView: React.FC<ProjectVaultViewProps> = ({
   };
 
   const [copiedWebhook, setCopiedWebhook] = useState(false);
+
+  // Notion "Writ Vault" Cloud Watcher State
+  const [isNotionConfigOpen, setIsNotionConfigOpen] = useState(false);
+  const [notionConfig, setNotionConfig] = useState<NotionVaultSyncConfig | null>(null);
+  const [notionToken, setNotionToken] = useState("");
+  const [notionVaultPageId, setNotionVaultPageId] = useState("");
+  const [notionAutoSync, setNotionAutoSync] = useState(true);
+  const [isSyncingNotion, setIsSyncingNotion] = useState(false);
+  const [isScaffolding, setIsScaffolding] = useState(false);
+  const [notionFeedback, setNotionFeedback] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+
+  // Load Notion sync configuration on mount
+  useEffect(() => {
+    platformHub.getNotionVaultSyncConfig().then(cfg => {
+      if (cfg) {
+        setNotionConfig(cfg);
+        setNotionToken(cfg.token || "");
+        setNotionVaultPageId(cfg.vaultPageId || "");
+        setNotionAutoSync(cfg.enabled ?? true);
+      }
+    });
+  }, []);
+
+  const handleSaveNotionConfig = async () => {
+    setNotionFeedback({ type: "info", message: "Connecting to Notion & verifying page..." });
+    const cleanId = platformHub.extractNotionId(notionVaultPageId);
+
+    const testRes = await platformHub.testNotionVaultConnection(notionToken, cleanId);
+    if (!testRes.success) {
+      setNotionFeedback({ type: "error", message: testRes.message });
+      return;
+    }
+
+    const saveRes = await platformHub.saveNotionVaultSyncConfig({
+      token: notionToken.trim(),
+      vaultPageId: cleanId,
+      enabled: notionAutoSync
+    });
+
+    if (saveRes.success && saveRes.config) {
+      setNotionConfig(saveRes.config);
+      setNotionFeedback({
+        type: "success",
+        message: `Verified! Connected to Notion page (${testRes.subpagesCount || 0} subpages found).`
+      });
+      setTimeout(() => setNotionFeedback(null), 5000);
+    } else {
+      setNotionFeedback({ type: "error", message: saveRes.error || "Could not save configuration" });
+    }
+  };
+
+  const handleTriggerNotionSync = async () => {
+    setIsSyncingNotion(true);
+    setNotionFeedback({ type: "info", message: "Polling Notion subpages under Writ Vault..." });
+    const res = await platformHub.triggerNotionVaultSync();
+    setIsSyncingNotion(false);
+
+    if (res.success) {
+      setNotionFeedback({
+        type: "success",
+        message: res.syncedCount && res.syncedCount > 0
+          ? `Ingested ${res.syncedCount} new item(s) from Notion into Writ Vault!`
+          : `Notion Vault is up to date (${res.subpagesFound || 0} project subpages scanned).`
+      });
+      platformHub.getNotionVaultSyncConfig().then(cfg => { if (cfg) setNotionConfig(cfg); });
+      setTimeout(() => setNotionFeedback(null), 6000);
+    } else {
+      setNotionFeedback({ type: "error", message: res.error || "Notion sync failed" });
+    }
+  };
+
+  const handleScaffoldProjectSubpages = async () => {
+    setIsScaffolding(true);
+    setNotionFeedback({ type: "info", message: "Creating missing project subpages inside Writ Vault in Notion..." });
+    const res = await platformHub.scaffoldNotionProjectSubpages();
+    setIsScaffolding(false);
+
+    if (res.success) {
+      setNotionFeedback({
+        type: "success",
+        message: res.createdCount > 0
+          ? `Created ${res.createdCount} project subpage(s) in Notion under "Writ Vault"!`
+          : `All project subpages already exist in Notion (${res.existingCount} found).`
+      });
+      platformHub.getNotionVaultSyncConfig().then(cfg => { if (cfg) setNotionConfig(cfg); });
+      setTimeout(() => setNotionFeedback(null), 6000);
+    } else {
+      setNotionFeedback({ type: "error", message: res.error || "Could not create subpages in Notion" });
+    }
+  };
 
   const handleOpenDropFolder = async () => {
     try {
@@ -177,43 +275,213 @@ export const ProjectVaultView: React.FC<ProjectVaultViewProps> = ({
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {/* Background Folder Watcher & Inbound Webhook Strip */}
-        <div className="p-4 rounded-xl bg-[#141416] border border-[#27272A] flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-[#7E9F86] animate-pulse shrink-0" />
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-[#ECE7DE]">Folder Watcher Active</span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1E1E22] text-[#71717A]">
-                  data\vault_inbox
-                </span>
+        {/* Dual Watchers: Local Folder Watcher + Notion "Writ Vault" Cloud Watcher */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Local Folder Watcher */}
+          <div className="p-4 rounded-xl bg-[#141416] border border-[#27272A] flex flex-col justify-between gap-3 text-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-2.5 h-2.5 rounded-full bg-[#7E9F86] animate-pulse shrink-0" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-[#ECE7DE]">Folder Watcher Active</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1E1E22] text-[#71717A]">
+                    data\vault_inbox
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#71717A] mt-0.5">
+                  Drop any text, notes, images, or PDFs into this folder to auto-ingest without clicking.
+                </p>
               </div>
-              <p className="text-[11px] text-[#71717A] mt-0.5">
-                Drop any text, notes, images, or PDFs into this folder to auto-ingest without clicking or opening the app.
-              </p>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1 border-t border-[#1F1F23]">
+              <button
+                onClick={handleOpenDropFolder}
+                className="px-3 py-1.5 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
+                title="Open the local drop folder in Windows File Explorer"
+              >
+                <Inbox className="w-3.5 h-3.5 text-[#C8A051]" />
+                <span>Open Drop Folder</span>
+              </button>
+
+              <button
+                onClick={handleCopyWebhook}
+                className="px-3 py-1.5 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#A1A1AA] hover:text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
+                title="Copy Inbound Webhook URL for Apple Shortcuts, Notion automations, or email forwards"
+              >
+                <Link2 className="w-3.5 h-3.5 text-[#7E9F86]" />
+                <span>{copiedWebhook ? "Copied Webhook!" : "Copy Webhook URL"}</span>
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handleOpenDropFolder}
-              className="px-3 py-1.5 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
-              title="Open the local drop folder in Windows File Explorer"
-            >
-              <Inbox className="w-3.5 h-3.5 text-[#C8A051]" />
-              <span>Open Drop Folder</span>
-            </button>
+          {/* Notion "Writ Vault" Autonomous Cloud Watcher */}
+          <div className="p-4 rounded-xl bg-[#141416] border border-[#27272A] flex flex-col justify-between gap-3 text-xs">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                  notionConfig?.enabled && notionConfig?.token && notionConfig?.vaultPageId
+                    ? "bg-[#7E9F86] animate-pulse"
+                    : "bg-[#71717A]"
+                }`} />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-[#ECE7DE]">Notion "Writ Vault" Watcher</span>
+                    {notionConfig?.enabled && notionConfig?.token && notionConfig?.vaultPageId ? (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1A261E] text-[#7E9F86] border border-[#284231]">
+                        Watching Subpage: {project.title}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1E1E22] text-[#A1A1AA]">
+                        Setup Required
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[#71717A] mt-0.5">
+                    {notionConfig?.enabled && notionConfig?.token && notionConfig?.vaultPageId
+                      ? `Constantly polls Notion subpage "${project.title}" and auto-syncs new notes directly here.`
+                      : "Connect Notion API to auto-sync notes added to your 'Writ Vault' page in Notion."}
+                  </p>
+                </div>
+              </div>
 
-            <button
-              onClick={handleCopyWebhook}
-              className="px-3 py-1.5 rounded-lg bg-[#1E1E22] hover:bg-[#28282C] border border-[#2C2C32] text-xs text-[#A1A1AA] hover:text-[#ECE7DE] flex items-center gap-1.5 cursor-pointer transition-all"
-              title="Copy Inbound Webhook URL for Apple Shortcuts, Notion automations, or email forwards"
-            >
-              <Link2 className="w-3.5 h-3.5 text-[#7E9F86]" />
-              <span>{copiedWebhook ? "Copied Webhook!" : "Copy Webhook URL"}</span>
-            </button>
+              <button
+                onClick={() => setIsNotionConfigOpen(!isNotionConfigOpen)}
+                className="p-1 rounded-md hover:bg-[#1E1E22] text-[#A1A1AA] hover:text-[#ECE7DE] cursor-pointer transition-colors shrink-0"
+                title={isNotionConfigOpen ? "Collapse Notion Settings" : "Configure Notion Token & Writ Vault Page"}
+              >
+                {isNotionConfigOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1 border-t border-[#1F1F23]">
+              <button
+                onClick={handleTriggerNotionSync}
+                disabled={isSyncingNotion || !notionConfig?.token || !notionConfig?.vaultPageId}
+                className={`px-3 py-1.5 rounded-lg border text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                  isSyncingNotion
+                    ? "bg-[#C8A051]/10 border-[#C8A051]/30 text-[#C8A051] cursor-wait"
+                    : !notionConfig?.token || !notionConfig?.vaultPageId
+                    ? "bg-[#18181A] border-[#222226] text-[#52525B] cursor-not-allowed"
+                    : "bg-[#1E1E22] hover:bg-[#28282C] border-[#2C2C32] text-[#ECE7DE] hover:text-[#C8A051]"
+                }`}
+                title="Immediately poll Notion for new notes in this project's subpage"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingNotion ? "animate-spin text-[#C8A051]" : "text-[#7E9F86]"}`} />
+                <span>{isSyncingNotion ? "Syncing..." : "Sync Notion Now"}</span>
+              </button>
+
+              <button
+                onClick={handleScaffoldProjectSubpages}
+                disabled={isScaffolding || !notionConfig?.token || !notionConfig?.vaultPageId}
+                className={`px-3 py-1.5 rounded-lg border text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                  isScaffolding
+                    ? "bg-[#C8A051]/10 border-[#C8A051]/30 text-[#C8A051] cursor-wait"
+                    : !notionConfig?.token || !notionConfig?.vaultPageId
+                    ? "bg-[#18181A] border-[#222226] text-[#52525B] cursor-not-allowed"
+                    : "bg-[#1E1E22] hover:bg-[#28282C] border-[#2C2C32] text-[#A1A1AA] hover:text-[#ECE7DE]"
+                }`}
+                title="Automatically create subpages for all Writ projects under your 'Writ Vault' page in Notion"
+              >
+                <FolderPlus className="w-3.5 h-3.5 text-[#C8A051]" />
+                <span>{isScaffolding ? "Creating Subpages..." : "Auto-Create Project Subpages"}</span>
+              </button>
+
+              {notionConfig?.syncedBlockIds && notionConfig.syncedBlockIds.length > 0 && (
+                <span className="text-[11px] text-[#71717A] ml-auto hidden sm:inline">
+                  {notionConfig.syncedBlockIds.length} blocks synced
+                </span>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Feedback message banner */}
+        {notionFeedback && (
+          <div className={`p-3 rounded-lg text-xs flex items-center gap-2 border ${
+            notionFeedback.type === "success"
+              ? "bg-[#162B1D]/80 border-[#2E6A3F] text-[#A7E8B8]"
+              : notionFeedback.type === "error"
+              ? "bg-[#2D1515]/80 border-[#6B2A2A] text-[#FCA5A5]"
+              : "bg-[#181822]/80 border-[#303048] text-[#93C5FD]"
+          }`}>
+            <Cloud className="w-4 h-4 shrink-0" />
+            <span>{notionFeedback.message}</span>
+          </div>
+        )}
+
+        {/* Expandable Notion Configuration Drawer */}
+        {isNotionConfigOpen && (
+          <div className="p-5 rounded-xl border border-[#3F3F46] bg-[#111114] space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-[#222226] pb-3">
+              <div>
+                <h4 className="font-medium text-[#ECE7DE] flex items-center gap-2">
+                  <Cloud className="w-4 h-4 text-[#C8A051]" />
+                  <span>Configure Notion "Writ Vault" Watcher</span>
+                </h4>
+                <p className="text-[11px] text-[#71717A] mt-0.5">
+                  Writ will monitor the parent page named "Writ Vault" in your Notion workspace. Notes added to project subpages (e.g. "{project.title}") are auto-ingested here without duplicate imports.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#A1A1AA] block mb-1.5">
+                  Notion Integration Token
+                </label>
+                <input
+                  type="password"
+                  placeholder="secret_... or ntn_..."
+                  value={notionToken}
+                  onChange={e => setNotionToken(e.target.value)}
+                  className="w-full bg-[#161618] border border-[#2a2a2e] rounded-lg px-3 py-2 text-[#ECE7DE] font-mono focus:border-[#C8A051] focus:outline-none text-xs"
+                />
+                <p className="text-[10px] text-[#71717A] mt-1">
+                  Create an integration at <span className="text-[#C8A051]">notion.so/my-integrations</span> and connect it to your Writ Vault page.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-[11px] uppercase tracking-wider font-bold text-[#A1A1AA] block mb-1.5">
+                  "Writ Vault" Page URL or ID
+                </label>
+                <input
+                  type="text"
+                  placeholder="https://www.notion.so/.../Writ-Vault-... or 32-char ID"
+                  value={notionVaultPageId}
+                  onChange={e => setNotionVaultPageId(e.target.value)}
+                  className="w-full bg-[#161618] border border-[#2a2a2e] rounded-lg px-3 py-2 text-[#ECE7DE] font-mono focus:border-[#C8A051] focus:outline-none text-xs"
+                />
+                <p className="text-[10px] text-[#71717A] mt-1">
+                  Paste the browser link to your "Writ Vault" Notion page. Clean ID is extracted automatically.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <label className="flex items-center gap-2 cursor-pointer text-[#A1A1AA]">
+                <input
+                  type="checkbox"
+                  checked={notionAutoSync}
+                  onChange={e => setNotionAutoSync(e.target.checked)}
+                  className="rounded border-[#3F3F46] bg-[#1E1E22] text-[#C8A051] focus:ring-0"
+                />
+                <span>Enable Autonomous Background Polling (every 30 seconds)</span>
+              </label>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveNotionConfig}
+                  className="px-4 py-1.5 rounded-lg bg-[#C8A051] text-[#0A0A0C] font-semibold text-xs hover:bg-[#D9B262] transition-colors cursor-pointer"
+                >
+                  Save & Test Connection
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Fast Drop Capture Overlay / Form */}
         {isCapturing && (
           <form onSubmit={handleCaptureSubmit} className="p-5 rounded-xl border border-[#C8A051] bg-[#141414] space-y-3">

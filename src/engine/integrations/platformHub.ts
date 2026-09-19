@@ -859,6 +859,134 @@ export class PlatformHub {
     await this.openExternalUrl(targetUrl);
     return { success: true, url: targetUrl };
   }
+
+  // =========================================================
+  // NOTION WRIT VAULT WATCHER & SYNC CLIENT HELPERS
+  // =========================================================
+
+  public extractNotionId(input: string): string {
+    if (!input || typeof input !== "string") return "";
+    const cleaned = input.trim();
+    const noHyphens = cleaned.replace(/-/g, "");
+    const match = noHyphens.match(/[0-9a-f]{32}/i);
+    if (match) return match[0].toLowerCase();
+    const uuidMatch = cleaned.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    if (uuidMatch) return uuidMatch[0].replace(/-/g, "").toLowerCase();
+    return cleaned;
+  }
+
+  public async getNotionVaultSyncConfig(): Promise<NotionVaultSyncConfig | null> {
+    try {
+      const res = await fetch("http://localhost:4983/api/notion/vault-sync/config");
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  }
+
+  public async saveNotionVaultSyncConfig(
+    config: Partial<NotionVaultSyncConfig>
+  ): Promise<{ success: boolean; config?: NotionVaultSyncConfig; error?: string }> {
+    try {
+      const res = await fetch("http://localhost:4983/api/notion/vault-sync/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config)
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || `HTTP ${res.status}` };
+      return { success: true, config: data.config };
+    } catch (err: any) {
+      return { success: false, error: err.message || "Failed to save Notion sync configuration" };
+    }
+  }
+
+  public async triggerNotionVaultSync(): Promise<NotionVaultSyncResult> {
+    try {
+      const res = await fetch("http://localhost:4983/api/notion/vault-sync/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || `HTTP ${res.status}` };
+      return data;
+    } catch (err: any) {
+      return { success: false, error: err.message || "Could not reach Notion Vault Sync Service" };
+    }
+  }
+
+  public async scaffoldNotionProjectSubpages(
+    projects?: { id: string; title: string }[]
+  ): Promise<NotionScaffoldResult> {
+    try {
+      const res = await fetch("http://localhost:4983/api/notion/vault-sync/scaffold", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projects })
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, createdCount: 0, created: [], existingCount: 0, existing: [], error: data.error };
+      return data;
+    } catch (err: any) {
+      return { success: false, createdCount: 0, created: [], existingCount: 0, existing: [], error: err.message };
+    }
+  }
+
+  public async testNotionVaultConnection(
+    token?: string,
+    vaultPageId?: string
+  ): Promise<{ success: boolean; message: string; subpagesCount?: number; subpages?: any[]; error?: string }> {
+    try {
+      const res = await fetch("http://localhost:4983/api/notion/vault-sync/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, vaultPageId })
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, message: data.error || `HTTP ${res.status}`, error: data.error };
+      return data;
+    } catch (err: any) {
+      return { success: false, message: err.message || "Connection failed", error: err.message };
+    }
+  }
+}
+
+export interface NotionVaultSyncConfig {
+  token: string;
+  vaultPageId: string;
+  vaultPageTitle: string;
+  enabled: boolean;
+  intervalSeconds: number;
+  lastSyncTimestamp: number;
+  syncedBlockIds: string[];
+  lastStatus?: "idle" | "ok" | "warning" | "error";
+  lastMessage?: string;
+}
+
+export interface NotionVaultSyncResult {
+  success: boolean;
+  syncedCount?: number;
+  subpagesFound?: number;
+  subpages?: Array<{
+    subpageId: string;
+    subpageTitle: string;
+    matchedProject: string | null;
+    totalBlocks: number;
+    newItemsSynced: number;
+  }>;
+  message?: string;
+  error?: string;
+}
+
+export interface NotionScaffoldResult {
+  success: boolean;
+  createdCount: number;
+  created: Array<{ id: string; title: string; url?: string }>;
+  existingCount: number;
+  existing: Array<{ id: string; title: string }>;
+  message?: string;
+  error?: string;
 }
 
 export const platformHub = new PlatformHub();

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Segment } from "../../types/workspace";
 import { X, FileText, Plus, Trash2, Check } from "lucide-react";
 
@@ -6,6 +6,7 @@ interface SegmentMetadataModalProps {
   isOpen: boolean;
   onClose: () => void;
   segment: Segment;
+  projectTitle?: string;
   onSave: (updatedSegment: Partial<Segment>) => void;
 }
 
@@ -13,16 +14,29 @@ export const SegmentMetadataModal: React.FC<SegmentMetadataModalProps> = ({
   isOpen,
   onClose,
   segment,
+  projectTitle,
   onSave
 }) => {
-  const [title, setTitle] = useState(segment.title);
-  const [romanNumeral, setRomanNumeral] = useState(segment.romanNumeral);
-  const [synopsis, setSynopsis] = useState(segment.synopsis);
-  const [status, setStatus] = useState<"open" | "active" | "done">(segment.status);
-  const [goals, setGoals] = useState<string[]>(segment.goals || []);
+  const [title, setTitle] = useState(segment?.title || "");
+  const [romanNumeral, setRomanNumeral] = useState(segment?.romanNumeral || "I");
+  const [synopsis, setSynopsis] = useState(segment?.synopsis || "");
+  const [status, setStatus] = useState<"open" | "active" | "done">(segment?.status || "open");
+  const [goals, setGoals] = useState<string[]>(segment?.goals || []);
   const [newGoal, setNewGoal] = useState("");
 
-  if (!isOpen) return null;
+  // Re-synchronize local state whenever modal opens or segment changes
+  useEffect(() => {
+    if (segment) {
+      setTitle(segment.title || "");
+      setRomanNumeral(segment.romanNumeral || "I");
+      setSynopsis(segment.synopsis || "");
+      setStatus(segment.status || "open");
+      setGoals(segment.goals || []);
+      setNewGoal("");
+    }
+  }, [segment?.id, segment?.title, segment?.romanNumeral, segment?.synopsis, segment?.status, isOpen]);
+
+  if (!isOpen || !segment) return null;
 
   const handleAddGoal = () => {
     if (!newGoal.trim()) return;
@@ -52,7 +66,19 @@ export const SegmentMetadataModal: React.FC<SegmentMetadataModalProps> = ({
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#1c1c1c] bg-[#141414]">
           <div className="flex items-center gap-2.5">
             <FileText className="w-4 h-4 text-[#C8A051]" />
-            <h2 className="font-serif text-base font-medium text-[#ECE7DE]">Chapter & Beat Properties</h2>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-serif text-base font-medium text-[#ECE7DE]">Chapter & Beat Properties</h2>
+                {projectTitle && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#1c1c22] text-[#A09A8F] border border-[#2a2a34]">
+                    {projectTitle}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-[#71717A]">
+                Section {segment.romanNumeral} · {segment.title}
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
