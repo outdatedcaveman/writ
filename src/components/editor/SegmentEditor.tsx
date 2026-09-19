@@ -20,8 +20,10 @@ import {
   Sigma,
   Edit3,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Mic
 } from "lucide-react";
+import { DictationModal } from "./DictationModal";
 
 interface SegmentEditorProps {
   segment: Segment;
@@ -59,6 +61,7 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
   const [showDiff, setShowDiff] = useState(false);
   const [showMetrics, setShowMetrics] = useState(false);
   const [showLatex, setShowLatex] = useState(false);
+  const [isDictationOpen, setIsDictationOpen] = useState(false);
   const [commitMessage, setCommitMessage] = useState("");
   const [authorType, setAuthorType] = useState<"human" | "ai_copilot">("human");
   const [metrics, setMetrics] = useState<ManuscriptMetrics>(() =>
@@ -75,10 +78,50 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
     setMetrics(updated);
   }, [localText, segment, threads, wiki]);
 
+  // Global keyboard shortcut for Voice Dictation (Ctrl+Alt+V / Cmd+Alt+V)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === "v" || e.key === "V")) {
+        e.preventDefault();
+        setIsDictationOpen(prev => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setLocalText(val);
     onUpdateText(segment.id, val);
+  };
+
+  const handleInsertAtCursor = (insertedText: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      const newText = localText ? `${localText}\n\n${insertedText}` : insertedText;
+      setLocalText(newText);
+      onUpdateText(segment.id, newText);
+      return;
+    }
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const newText = localText.substring(0, start) + insertedText + localText.substring(end);
+
+    setLocalText(newText);
+    onUpdateText(segment.id, newText);
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + insertedText.length, start + insertedText.length);
+    }, 0);
+  };
+
+  const handleAppendToSegment = (textToAppend: string) => {
+    const newText = localText.trim() ? `${localText.trim()}\n\n${textToAppend}` : textToAppend;
+    setLocalText(newText);
+    onUpdateText(segment.id, newText);
   };
 
   const handleInsertMarkdown = (before: string, after: string = "", defaultText: string = "") => {
@@ -193,6 +236,7 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
         onInsertMarkdown={handleInsertMarkdown}
         isMathPreview={showLatex}
         onToggleMathPreview={() => setShowLatex(!showLatex)}
+        onOpenDictation={() => setIsDictationOpen(true)}
       />
 
       {/* Literary Cadence Diagnostics Drawer */}
@@ -293,6 +337,14 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
                   title="Toggle Literary Cadence Diagnostics"
                 >
                   <Sliders className="w-3.5 h-3.5" />
+                </button>
+
+                <button
+                  onClick={() => setIsDictationOpen(true)}
+                  className="p-1 rounded hover:bg-[#18181B] text-[#71717A] hover:text-[#C8A051] cursor-pointer transition-colors"
+                  title="Voice Dictation & Prose Polisher (Ctrl+Alt+V)"
+                >
+                  <Mic className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
@@ -510,6 +562,15 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
           </div>
         </div>
       )}
+
+      {/* Voice Dictation Studio & Literary Polisher Modal */}
+      <DictationModal
+        isOpen={isDictationOpen}
+        onClose={() => setIsDictationOpen(false)}
+        onInsertAtCursor={handleInsertAtCursor}
+        onAppendToSegment={handleAppendToSegment}
+        activeSegmentTitle={segment.title}
+      />
     </div>
   );
 };

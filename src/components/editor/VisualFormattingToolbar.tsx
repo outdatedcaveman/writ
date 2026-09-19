@@ -13,19 +13,22 @@ import {
   List,
   ListOrdered,
   CheckSquare,
-  Code
+  Code,
+  Mic
 } from "lucide-react";
 
 interface VisualFormattingToolbarProps {
   onInsertMarkdown: (before: string, after?: string, defaultText?: string) => void;
   isMathPreview: boolean;
   onToggleMathPreview: () => void;
+  onOpenDictation?: () => void;
 }
 
 export const VisualFormattingToolbar: React.FC<VisualFormattingToolbarProps> = ({
   onInsertMarkdown,
   isMathPreview,
-  onToggleMathPreview
+  onToggleMathPreview,
+  onOpenDictation
 }) => {
   return (
     <div className="flex items-center justify-between px-6 py-1.5 border-b border-[#18181A] bg-[#0A0A0C]/95 backdrop-blur select-none shrink-0 text-xs">
@@ -156,19 +159,32 @@ export const VisualFormattingToolbar: React.FC<VisualFormattingToolbarProps> = (
         </div>
       </div>
 
-      {/* Right: Math Render Toggle */}
-      <button
-        onClick={onToggleMathPreview}
-        className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors cursor-pointer font-sans ${
-          isMathPreview
-            ? "bg-[#C8A051]/15 text-[#C8A051] font-medium"
-            : "text-[#71717A] hover:text-[#ECE7DE]"
-        }`}
-        title="Toggle live LaTeX rendering preview"
-      >
-        <Sigma className="w-3 h-3" />
-        <span>KaTeX {isMathPreview ? "On" : "Off"}</span>
-      </button>
+      {/* Right: Dictate & Math Render Toggles */}
+      <div className="flex items-center gap-2">
+        {onOpenDictation && (
+          <button
+            onClick={onOpenDictation}
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] bg-[#C8A051]/10 border border-[#C8A051]/30 text-[#C8A051] hover:bg-[#C8A051]/20 transition-colors cursor-pointer font-sans"
+            title="Speech-to-Text Dictation & Prose Polisher (Ctrl+Alt+V)"
+          >
+            <Mic className="w-3 h-3" />
+            <span>Voice Dictate</span>
+          </button>
+        )}
+
+        <button
+          onClick={onToggleMathPreview}
+          className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors cursor-pointer font-sans ${
+            isMathPreview
+              ? "bg-[#C8A051]/15 text-[#C8A051] font-medium"
+              : "text-[#71717A] hover:text-[#ECE7DE]"
+          }`}
+          title="Toggle live LaTeX rendering preview"
+        >
+          <Sigma className="w-3 h-3" />
+          <span>KaTeX {isMathPreview ? "On" : "Off"}</span>
+        </button>
+      </div>
     </div>
   );
 };

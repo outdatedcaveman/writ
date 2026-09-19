@@ -954,6 +954,113 @@ function handleApiRequest(req, res, pathname, parsedUrl) {
     return;
   }
 
+  // Speech-To-Text Status & Engine Check
+  if (pathname === '/api/stt/status' && req.method === 'GET') {
+    const { execSync } = require('child_process');
+    let pythonInstalled = false;
+    let ffmpegInstalled = false;
+    let whisperInstalled = false;
+
+    try {
+      execSync('python --version', { stdio: 'ignore' });
+      pythonInstalled = true;
+    } catch {}
+
+    try {
+      execSync('ffmpeg -version', { stdio: 'ignore' });
+      ffmpegInstalled = true;
+    } catch {}
+
+    try {
+      execSync('whisper --help', { stdio: 'ignore' });
+      whisperInstalled = true;
+    } catch {}
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      available: true,
+      pythonInstalled,
+      ffmpegInstalled,
+      whisperInstalled,
+      recommendedEngine: whisperInstalled ? 'whisper_local' : 'web_speech_native',
+      engines: [
+        {
+          id: 'web_speech',
+          name: 'Chromium In-App Native STT',
+          description: 'Zero-latency streaming transcription built into the studio',
+          ready: true
+        },
+        {
+          id: 'whisper_local',
+          name: 'OpenAI Whisper Local CLI',
+          description: 'Offline high-accuracy neural transcription engine',
+          ready: whisperInstalled
+        }
+      ]
+    }));
+    return;
+  }
+
+  // Local Audio Transcription Endpoint
+  if (pathname === '/api/transcribe' && req.method === 'POST') {
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+      try {
+        const buffer = Buffer.concat(chunks);
+        const { execSync } = require('child_process');
+
+        let whisperAvailable = false;
+        try {
+          execSync('whisper --help', { stdio: 'ignore' });
+          whisperAvailable = true;
+        } catch {}
+
+        if (!whisperAvailable) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            fallbackToWebSpeech: true,
+            message: 'Whisper CLI is not installed on this PC. The app uses the native In-App Speech engine.'
+          }));
+          return;
+        }
+
+        const tempDir = os.tmpdir();
+        const tempAudioFile = path.join(tempDir, `writ_stt_${Date.now()}.webm`);
+        fs.writeFileSync(tempAudioFile, buffer);
+
+        const outDir = tempDir;
+        execSync(`whisper "${tempAudioFile}" --model base --output_format txt --output_dir "${outDir}"`, {
+          timeout: 45000,
+          stdio: 'pipe'
+        });
+
+        const expectedTxt = path.join(outDir, `${path.basename(tempAudioFile, path.extname(tempAudioFile))}.txt`);
+        let transcript = '';
+        if (fs.existsSync(expectedTxt)) {
+          transcript = fs.readFileSync(expectedTxt, 'utf-8').trim();
+          try { fs.unlinkSync(expectedTxt); } catch {}
+        }
+        try { fs.unlinkSync(tempAudioFile); } catch {}
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          transcript,
+          engine: 'whisper_local'
+        }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: false,
+          error: err.message || 'Local Whisper transcription failed'
+        }));
+      }
+    });
+    return;
+  }
+
   // Default 404 for unknown API
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Endpoint not found' }));

@@ -27,9 +27,11 @@ import {
   ChevronDown,
   ChevronUp,
   Check,
-  ExternalLink
+  ExternalLink,
+  Mic
 } from "lucide-react";
 import { platformHub, NotionVaultSyncConfig } from "../../engine/integrations/platformHub";
+import { DictationModal } from "../editor/DictationModal";
 
 interface ProjectVaultViewProps {
   project: Project;
@@ -63,6 +65,7 @@ export const ProjectVaultView: React.FC<ProjectVaultViewProps> = ({
   const [dropTitle, setDropTitle] = useState("");
   const [dropContent, setDropContent] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
+  const [isDictationOpen, setIsDictationOpen] = useState(false);
 
   const activeItems = vaultItems.filter(i => !i.isArchived);
   const filteredItems = filter === "all"
@@ -262,6 +265,15 @@ export const ProjectVaultView: React.FC<ProjectVaultViewProps> = ({
               Placed ({activeItems.filter(i => i.status === "placed").length})
             </button>
           </div>
+
+          <button
+            onClick={() => setIsDictationOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#C8A051]/15 border border-[#C8A051]/40 text-[#C8A051] text-xs font-medium hover:bg-[#C8A051]/25 transition-colors cursor-pointer"
+            title="Dictate voice note with automatic prose polishing"
+          >
+            <Mic className="w-3.5 h-3.5" />
+            <span>Voice Dictate</span>
+          </button>
 
           <button
             onClick={() => setIsCapturing(true)}
@@ -683,6 +695,27 @@ export const ProjectVaultView: React.FC<ProjectVaultViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Voice Dictation Studio & Literary Polisher Modal */}
+      <DictationModal
+        isOpen={isDictationOpen}
+        onClose={() => setIsDictationOpen(false)}
+        onInsertAtCursor={(text) => {
+          onAddItem({
+            type: "text",
+            title: `Voice Note ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+            content: text
+          });
+        }}
+        onDropToVault={(title, content) => {
+          onAddItem({
+            type: "text",
+            title,
+            content
+          });
+        }}
+        activeSegmentTitle={project.title}
+      />
     </div>
   );
 };
